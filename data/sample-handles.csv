@@ -1,0 +1,4 @@
+handle,type,city,tier
+@sample_venue_one,venue,Indore,A
+sample_comedy_club,comedy_club,indore,A
+https://www.instagram.com/sample_college_fest/,college,Indore,B
