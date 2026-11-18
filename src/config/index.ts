@@ -105,12 +105,14 @@ export const budgets = {
   translation: num("TRANSLATION_BUDGET_USD", 5),
   /** Sub-limit inside "model" for public submissions: reading snapped posters and pre-screening. */
   submissions: num("SUBMISSIONS_BUDGET_USD", 3),
+  /** Sub-limit inside "model" for natural-language search: parsing queries the rules cannot read. */
+  search: num("SEARCH_BUDGET_USD", 3),
   /** Fraction of a cap at which a warning is logged. */
   warnAt: 0.8,
 } as const;
 
 export type BudgetBucket = "scrape" | "model";
-export type SubBudget = "reelTranscript" | "googleEvents" | "newsCalendars" | "enrichment" | "translation" | "submissions";
+export type SubBudget = "reelTranscript" | "googleEvents" | "newsCalendars" | "enrichment" | "translation" | "submissions" | "search";
 
 export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   reelTranscript: "scrape",
@@ -119,6 +121,16 @@ export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   enrichment: "model",
   translation: "model",
   submissions: "model",
+  search: "model",
+};
+
+/**
+ * Daily caps (USD, per calendar day in UTC) on top of a sub-budget's monthly
+ * cap, for features any visitor can trigger. The budget guard refuses a call
+ * that would cross either one.
+ */
+export const dailyCaps: Partial<Record<SubBudget, number>> = {
+  search: num("SEARCH_DAILY_BUDGET_USD", 0.25),
 };
 
 /**
@@ -323,4 +335,25 @@ export const inbound = {
   allowedSenders: (process.env.POSTER_EMAIL_SENDERS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
   /** City the emailed posters are filed under. */
   city: (process.env.POSTER_EMAIL_CITY ?? "indore").toLowerCase(),
+} as const;
+
+/**
+ * Natural-language search (Prompt 7). Rules read the common patterns; the fast
+ * tier is asked only when they cannot, and its answers are cached.
+ */
+export const search = {
+  /** Longest query read; anything after this is ignored. */
+  maxQueryChars: 200,
+  /** Model parses per hashed IP address. Past either limit the search falls back to keywords. */
+  limits: {
+    hour: { max: 20, windowMinutes: 60 },
+    day: { max: 60, windowMinutes: 24 * 60 },
+  },
+  /** A cached parse is reused for this long, then asked again (filter values change). */
+  cacheDays: 30,
+  /** Leftover words the rules may treat as search words without asking the model. */
+  maxRuleKeywords: 2,
+  /** Reserved against the budget before a parse; replaced by the measured cost. */
+  estInputTokens: 1200,
+  estOutputTokens: 150,
 } as const;

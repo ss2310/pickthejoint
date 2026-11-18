@@ -5,14 +5,14 @@
  *   - reports the last day's activity and the month's spend.
  */
 import type { Pool } from "pg";
-import { submissions } from "../../config";
+import { search, submissions } from "../../config";
 import { mergeDuplicates } from "./dedupe";
 
 /**
  * Deletes what is only kept for a while (Prompt 6): poster photos once their
  * time is up (the day after the event, or sooner when unused), drafts that
  * were never sent (with their photo), rate-limit records and expired admin
- * sessions.
+ * sessions; and (Prompt 7) cached search readings past their time.
  */
 export async function cleanUp(pool: Pool, now = new Date()) {
   const drafts = await pool.query<{ poster_id: number | null }>(
@@ -24,7 +24,11 @@ export async function cleanUp(pool: Pool, now = new Date()) {
     [now, orphanPosters]);
   const hits = await pool.query("DELETE FROM rate_hits WHERE hit_at < $1::timestamptz - interval '2 days'", [now]);
   const sessions = await pool.query("DELETE FROM admin_sessions WHERE expires_at < $1", [now]);
-  return { posterPhotosDeleted: posters.rowCount ?? 0, unsentDraftsDeleted: drafts.rowCount ?? 0, rateRecordsDeleted: hits.rowCount ?? 0, expiredSessions: sessions.rowCount ?? 0 };
+  const readings = await pool.query("DELETE FROM search_parse_cache WHERE created_at < $1::timestamptz - make_interval(days => $2)", [now, search.cacheDays]);
+  return {
+    posterPhotosDeleted: posters.rowCount ?? 0, unsentDraftsDeleted: drafts.rowCount ?? 0, rateRecordsDeleted: hits.rowCount ?? 0,
+    expiredSessions: sessions.rowCount ?? 0, searchReadingsExpired: readings.rowCount ?? 0,
+  };
 }
 
 export async function housekeeping(pool: Pool, opts: { dryRun?: boolean; now?: Date } = {}) {

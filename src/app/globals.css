@@ -215,6 +215,18 @@ main { padding-bottom: 4.5rem; }
 .filters input, .filters select { font: inherit; font-weight: 500; text-transform: none; letter-spacing: 0; padding: 0.55rem 0.7rem; border: 1px solid var(--rule); border-radius: 12px; background: var(--bg); color: var(--fg); min-height: 2.9rem; width: 100%; }
 .filters .button { min-height: 2.9rem; }
 
+/* Plain-words search box (Prompt 7) */
+.ask { margin: 1.4rem 0 0; max-width: 40rem; }
+.ask label { display: block; font-weight: 800; margin-bottom: 0.45rem; }
+.ask-row { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.ask input { flex: 1 1 14rem; min-width: 0; font: inherit; padding: 0.7rem 1rem; border: 1px solid var(--rule); border-radius: 99px; background: var(--bg); color: var(--fg); min-height: 3rem; }
+.ask .button { min-height: 3rem; }
+.ask-hint { margin: 0.5rem 0 0; opacity: 0.85; }
+.hero .ask label, .hero .ask-hint { color: #ffffff; }
+.search-status p { margin: 0 0 0.4rem; }
+.search-status p:first-child { font-weight: 700; }
+.filters-heading { font-size: 1rem; margin: 1.6rem 0 0.6rem; }
+
 /* Text pages */
 .prose { max-width: 44rem; }
 .prose h2 { margin-top: 2.25rem; }

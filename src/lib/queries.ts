@@ -56,6 +56,43 @@ export interface EventFilter {
   when?: "upcoming" | "past" | "any";
   excludeId?: number;
   limit?: number;
+  /**
+   * Search words (Prompt 7), already folded by `foldText`. Latin words use full-text search over the event's
+   * title and description and the names of its venue (with address), performers and organisers, matching
+   * word starts. Devanagari words are looked for in the Hindi text of the same.
+   */
+  keywords?: string[];
+  /** "all" (default): every word must match. "any": one is enough (the fallback when the query was not understood). */
+  keywordMode?: "all" | "any";
+}
+
+/** Full-text document for keyword search: the event's own text plus the names around it. */
+const KEYWORD_DOC = `(e.search_tsv
+  || to_tsvector('simple', coalesce(v.name, '') || ' ' || coalesce(v.address, '') || ' ' || coalesce(a.name, ''))
+  || to_tsvector('simple', coalesce((SELECT string_agg(ar.name, ' ') FROM event_artists x JOIN artists ar ON ar.id = x.artist_id WHERE x.event_id = e.id), '')
+       || ' ' || coalesce((SELECT string_agg(o.name, ' ') FROM event_organisers x JOIN organisers o ON o.id = x.organiser_id WHERE x.event_id = e.id), '')))`;
+/** The Hindi text of the same, with nuktas removed the way `foldText` removes them from the query. */
+const HINDI_DOC = `replace(coalesce((SELECT string_agg(tx.text, ' ') FROM translations tx WHERE tx.locale = 'hi' AND (
+    (tx.entity_type = 'event' AND tx.entity_id = e.id) OR (tx.entity_type = 'venue' AND tx.entity_id = v.id)
+    OR (tx.entity_type = 'area' AND tx.entity_id = a.id)
+    OR (tx.entity_type = 'artist' AND tx.entity_id IN (SELECT x.artist_id FROM event_artists x WHERE x.event_id = e.id))
+    OR (tx.entity_type = 'organiser' AND tx.entity_id IN (SELECT x.organiser_id FROM event_organisers x WHERE x.event_id = e.id)))), ''), U&'\\093C', '')`;
+
+/** One SQL condition for the search words, or null when there are none usable. */
+function keywordSql(f: EventFilter, add: (value: unknown) => string): string | null {
+  const parts: string[] = [];
+  for (const raw of f.keywords ?? []) {
+    const latin = raw.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (latin && latin === raw.toLowerCase()) {
+      // Word starts, so "workshop" finds "workshops"; a plural is cut back so "workshops" finds "workshop".
+      const stem = latin.length > 4 && latin.endsWith("s") ? latin.slice(0, -1) : latin;
+      parts.push(`${KEYWORD_DOC} @@ to_tsquery('simple', ${add(`${stem}:*`)})`);
+    } else if (/^[ऀ-ॿ]+$/.test(raw)) {
+      parts.push(`position(${add(raw)} in ${HINDI_DOC}) > 0`);
+    }
+  }
+  if (parts.length === 0) return null;
+  return `(${parts.join(f.keywordMode === "any" ? " OR " : " AND ")})`;
 }
 
 const card = (l: Locale) => `
@@ -93,6 +130,8 @@ export async function listEvents(f: EventFilter, locale: Locale = getLocale()): 
   if (f.free === true) where.push("e.is_free IS TRUE");
   if (f.free === false) where.push("e.is_free IS NOT TRUE AND e.price_text IS NOT NULL");
   if (f.excludeId) add("e.id <> ?", f.excludeId);
+  const words = keywordSql(f, (value) => { args.push(value); return `$${args.length}`; });
+  if (words) where.push(words);
   const when = f.when ?? "upcoming";
   if (when === "upcoming") where.push(`NOT ${OVER}`);
   if (when === "past") where.push(OVER);
