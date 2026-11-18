@@ -107,7 +107,7 @@ export function extractionRequest(input: ExtractionInput): LlmRequest<Extraction
     input.text.trim() || "(empty)",
   ];
   if (input.transcript?.trim()) {
-    parts.push("", "Spoken words in the reel (automatic transcript, may contain errors):", input.transcript.trim().slice(0, 6000));
+    parts.push("", "From the reel's audio and on-screen text (read automatically, may contain errors):", input.transcript.trim().slice(0, 6000));
   }
   const text = parts.join("\n");
   const content: Anthropic.ContentBlockParam[] = [

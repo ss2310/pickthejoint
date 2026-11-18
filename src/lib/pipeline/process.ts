@@ -66,15 +66,19 @@ function toInput(row: RawRow, lists: Awaited<ReturnType<typeof cityLists>>, imag
 
 /** Transcript actors differ in input and output names; these cover the ones we have checked. */
 export function transcriptInput(actorId: string, reelUrl: string): Record<string, unknown> {
+  if (/instagram-reel-transcript-scraper$/.test(actorId)) return { reelUrls: [reelUrl], maxItems: 1 };
   if (/instagram-reel-scraper$/.test(actorId)) return { username: [reelUrl], resultsLimit: 1, includeTranscript: true };
   return { bulkUrls: [reelUrl] };
 }
+/** Spoken words, plus on-screen text where the actor reads it (music-only reels often carry the details there). */
 export function transcriptText(items: Record<string, unknown>[]): string {
+  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
   for (const item of items) {
-    for (const key of ["transcript", "text", "spokenTranscript", "transcription"]) {
-      const v = item[key];
-      if (typeof v === "string" && v.trim()) return v.trim();
-    }
+    if (item._summary) continue;
+    const spoken = ["transcript", "text", "spokenTranscript", "transcription"].map((k) => str(item[k])).find(Boolean) ?? "";
+    const onScreen = str(item.onScreenText);
+    const text = [spoken, onScreen && `Text shown on screen: ${onScreen}`].filter(Boolean).join("\n");
+    if (text) return text;
   }
   return "";
 }
@@ -193,7 +197,7 @@ export async function processPosts(pool: Pool, deps: Deps, opts: ProcessOptions)
           units: 1, unitLabel: "transcripts", estimatedUsd: apify.usdPerTranscript, jobName: opts.jobName,
         },
         async () => transcriptText((await deps.apify.runActor(apify.reelTranscriptActorId, transcriptInput(apify.reelTranscriptActorId, row.post_url),
-          { maxChargeUsd: apify.usdPerTranscript, maxItems: 1, timeoutSecs: 300 })).items),
+          { maxChargeUsd: Math.max(apify.usdPerTranscript, 0.05), maxItems: 1, timeoutSecs: 300 })).items),
         { pool },
       ).catch((err) => {
         if ((err as Error).name === "BudgetExceededError") return null; // limit reached: carry on without transcripts

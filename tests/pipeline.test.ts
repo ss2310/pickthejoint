@@ -3,7 +3,7 @@ import type { Pool } from "pg";
 
 vi.hoisted(() => {
   process.env.APIFY_ACTOR_ID = "apify/instagram-post-scraper";
-  process.env.APIFY_TRANSCRIPT_ACTOR_ID = "someone/reel-transcripts";
+  process.env.APIFY_TRANSCRIPT_ACTOR_ID = "someone/instagram-reel-transcript-scraper";
 });
 
 import { freshDb } from "./helpers";
@@ -249,15 +249,18 @@ describe("pipeline", () => {
     const llm = new FakeLlm((kind, text) => {
       if (kind !== "extract") return DESCRIPTION;
       extractCalls++;
-      if (text.includes("REEL") && !text.includes("Spoken words")) return extraction([event({ start_date: f<string>(null) })]);
+      if (text.includes("REEL") && !text.includes("on-screen text")) return extraction([event({ start_date: f<string>(null) })]);
       return extraction([event()]);
     });
-    const apify = new FakeApify((actorId) => actorId === "someone/reel-transcripts"
-      ? [{ text: "see you this Saturday at eight at the Blue Room" }]
+    const apify = new FakeApify((actorId) => actorId === "someone/instagram-reel-transcript-scraper"
+      ? [{ transcript: "see you this Saturday at eight", onScreenText: "The Blue Room" }, { _summary: true, status: "run_summary" }]
       : [post("R1", "the_blue_room", `REEL ${EVENT_CAPTION}`, { type: "Video" }), post("P2", "indore_gigs", EVENT_CAPTION)]);
     const report = await ingest([], llm, apify);
-    expect(apify.calls.filter((c) => c.actorId === "someone/reel-transcripts")).toHaveLength(1);
+    expect(apify.calls.filter((c) => c.actorId === "someone/instagram-reel-transcript-scraper")).toHaveLength(1);
+    expect(apify.calls.find((c) => c.actorId.endsWith("transcript-scraper"))!.input).toEqual({ reelUrls: ["https://www.instagram.com/p/R1/"], maxItems: 1 });
     expect(report.transcripts).toMatchObject({ requested: 1, empty: 0, filledAMissingField: 1 });
+    expect((await pool.query("SELECT transcript FROM raw_posts WHERE shortcode = 'R1'")).rows[0].transcript)
+      .toBe("see you this Saturday at eight\nText shown on screen: The Blue Room");
     expect(extractCalls).toBe(3);
     expect((await pool.query("SELECT sub_budget FROM cost_log WHERE sub_budget IS NOT NULL")).rows).toEqual([{ sub_budget: "reelTranscript" }]);
     // The transcript informs the facts; it is not in the published text.
