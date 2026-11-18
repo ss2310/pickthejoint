@@ -386,6 +386,8 @@ export const citations = {
     "district.in", "bookmyshow.com", "insider.in", "paytminsider.com", "allevents.in", "eventbrite.com", "eventbrite.co.in",
     "townscript.com", "skillboxes.com", "highape.com", "meraevents.com", "explara.com", "ticketnew.com", "zomato.com",
     "eventshigh.com", "knowafest.com", "songkick.com", "bandsintown.com", "sortmyscene.com", "urbanaut.app", "ticketsterrace.com",
+    // Seen in the baseline run, 18 Nov 2026.
+    "stayhappening.com", "happeningnext.com", "mepass.in",
   ],
   /** Longest answer text kept per check (admin only). */
   excerptChars: 4000,
