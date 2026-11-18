@@ -15,7 +15,7 @@ import { changedPaths } from "../src/lib/indexnow";
 import { getArtist, getVenue } from "../src/lib/queries";
 import type { ActorRunResult, ApifyClient } from "../src/lib/pipeline/apify";
 import {
-  assess, enrichEntities, isPrivate, normaliseProfile, pickTargets, researchPrompt, researchSystem, type Structured,
+  assess, enrichEntities, isPrivate, normaliseProfile, pickTargets, researchPrompt, researchSystem, siteOf, type Structured,
 } from "../src/lib/pipeline/enrich";
 import { addressConfidence } from "../src/lib/pipeline/geocode";
 import type { LlmClient, LlmRequest, LlmResult, LlmRunOptions } from "../src/lib/pipeline/llm";
@@ -165,6 +165,17 @@ describe("checking facts", () => {
     ] }), pages, own);
     expect(a.facts.map((f) => f.field).sort()).toEqual(["capacity", "venue_type"]);
     expect(a.facts.find((f) => f.field === "venue_type")!.sources[0].strength).toBe("official");
+  });
+
+  it("does not count one site under two addresses as two sources", () => {
+    expect(siteOf("tripadvisor.in")).toBe(siteOf("tripadvisor.com"));
+    expect(siteOf("timesofindia.indiatimes.com")).toBe("indiatimes");
+    expect(siteOf("dineout.co.in")).toBe("dineout");
+    const both = [page("https://www.tripadvisor.in/Restaurant-1"), page("https://www.tripadvisor.com/Restaurant-1")];
+    const a = assess("venue", structured({ facts: [
+      { field: "address", value: "1 Main Road, Indore", sources: [src(both[0].url, "weak"), src(both[1].url, "weak")], confidence: 0.9 }] }), both, { urls: [], websites: [] });
+    expect(a.facts).toEqual([]);
+    expect(a.leftOut[0].reason).toBe("supported by a single weak source");
   });
 
   it("sends unsure facts to review and drops private facts about people", () => {
