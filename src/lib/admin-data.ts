@@ -96,3 +96,38 @@ export async function overviewCounts(pool: Pool = getPool()) {
     postersStored: await one("SELECT count(*) AS n FROM poster_images"),
   };
 }
+
+export interface SearchQueryRow { normalized: string; example: string; searches: number; zero: number; last_at: Date; last_method: string; last_results: number }
+export interface SearchLogRow {
+  id: number; searched_at: Date; query: string; locale: string | null; parse_method: string | null; parsed: Record<string, unknown> | null;
+  result_count: number; cost_usd: number;
+}
+
+/**
+ * Search queries over the last `days` days (Prompt 7): the most common, the
+ * ones that found nothing (the hub pages and handles that are missing), how
+ * they were read, and what reading them cost.
+ */
+export async function searchReport(days = 30, pool: Pool = getPool()) {
+  const since = `now() - make_interval(days => ${Math.max(1, Math.floor(days))})`;
+  const grouped = (where: string, order: string) => pool.query<SearchQueryRow>(
+    `SELECT normalized, (array_agg(query ORDER BY searched_at DESC))[1] AS example, count(*)::int AS searches,
+            count(*) FILTER (WHERE result_count = 0)::int AS zero, max(searched_at) AS last_at,
+            (array_agg(parse_method ORDER BY searched_at DESC))[1] AS last_method, (array_agg(result_count ORDER BY searched_at DESC))[1] AS last_results
+     FROM search_log WHERE searched_at >= ${since} GROUP BY normalized ${where} ORDER BY ${order} LIMIT 50`);
+  const [common, zero, methods, recent, today] = await Promise.all([
+    grouped("", "searches DESC, last_at DESC"),
+    grouped("HAVING (array_agg(result_count ORDER BY searched_at DESC))[1] = 0", "searches DESC, last_at DESC"),
+    pool.query<{ parse_method: string; searches: number; usd: number }>(
+      `SELECT coalesce(parse_method, 'unknown') AS parse_method, count(*)::int AS searches, sum(cost_usd)::float AS usd
+       FROM search_log WHERE searched_at >= ${since} GROUP BY 1 ORDER BY searches DESC`),
+    pool.query<SearchLogRow>(
+      `SELECT id, searched_at, query, locale, parse_method, parsed, result_count, cost_usd::float AS cost_usd
+       FROM search_log ORDER BY searched_at DESC, id DESC LIMIT 60`),
+    pool.query<{ usd: number; calls: number }>(
+      `SELECT coalesce(sum(estimated_usd), 0)::float AS usd, count(*)::int AS calls FROM cost_log
+       WHERE NOT dry_run AND sub_budget = 'search' AND logged_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`),
+  ]);
+  const cached = (await pool.query<{ n: number }>("SELECT count(*)::int AS n FROM search_parse_cache")).rows[0].n;
+  return { common: common.rows, zero: zero.rows, methods: methods.rows, recent: recent.rows, today: today.rows[0], cached };
+}

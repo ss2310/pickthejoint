@@ -30,6 +30,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 <Link href="/admin/posters">Poster inbox</Link>
                 <Link href="/admin/handles">Handles</Link>
                 <Link href="/admin/events">Events</Link>
+                <Link href="/admin/search">Search</Link>
                 <form action={logout}><button type="submit" className="linkish">Sign out</button></form>
               </nav>
             )}

@@ -9,12 +9,14 @@
  *   3. runs the call, then replaces the estimate with the actual cost if the
  *      call reports one;
  *   4. logs a warning once spend reaches 80% of a cap.
+ * A sub-budget listed in `dailyCaps` (features any visitor can trigger, such
+ * as search) is also held to a cap per calendar day in UTC.
  * In dry-run mode the paid call is skipped and the would-be cost is logged
  * with dry_run = true (excluded from monthly totals).
  * Months are calendar months in UTC, matching how vendors bill.
  */
 import { getPool } from "./db";
-import { budgets, subBudgetParent, type BudgetBucket, type SubBudget } from "../config";
+import { budgets, dailyCaps, subBudgetParent, type BudgetBucket, type SubBudget } from "../config";
 import type { Pool } from "pg";
 
 export class BudgetExceededError extends Error {
@@ -54,6 +56,7 @@ export interface CallOutcome<T> {
 export interface GuardOptions {
   pool?: Pool;
   caps?: Partial<Record<BudgetBucket | SubBudget, number>>;
+  dailyCaps?: Partial<Record<SubBudget, number>>;
   warn?: (msg: string) => void;
   now?: Date;
 }
@@ -66,13 +69,28 @@ function monthStartUtc(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 }
 
+function dayStartUtc(now: Date): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
 /** Total non-dry-run spend this month for a bucket, or for a sub-budget. */
 export async function monthSpend(
   name: BudgetBucket | SubBudget,
   opts: GuardOptions = {},
 ): Promise<number> {
+  return spendSince(name, monthStartUtc(opts.now ?? new Date()), opts);
+}
+
+/** Total non-dry-run spend today (UTC) for a bucket, or for a sub-budget. */
+export async function daySpend(
+  name: BudgetBucket | SubBudget,
+  opts: GuardOptions = {},
+): Promise<number> {
+  return spendSince(name, dayStartUtc(opts.now ?? new Date()), opts);
+}
+
+async function spendSince(name: BudgetBucket | SubBudget, since: Date, opts: GuardOptions): Promise<number> {
   const pool = opts.pool ?? getPool();
-  const since = monthStartUtc(opts.now ?? new Date());
   const isSub = name in subBudgetParent;
   const { rows } = await pool.query<{ total: string }>(
     `SELECT coalesce(sum(estimated_usd), 0) AS total FROM cost_log
@@ -123,6 +141,13 @@ export async function guardedCall<T>(
       const cap = capFor(name, opts);
       if (spent >= cap || spent + call.estimatedUsd > cap) {
         throw new BudgetExceededError(name, spent, cap, call.estimatedUsd);
+      }
+    }
+    const dailyCap = call.subBudget ? (opts.dailyCaps ?? dailyCaps)[call.subBudget] : undefined;
+    if (call.subBudget && dailyCap !== undefined) {
+      const spent = await daySpend(call.subBudget, { ...opts, pool: client as unknown as Pool, now });
+      if (spent >= dailyCap || spent + call.estimatedUsd > dailyCap) {
+        throw new BudgetExceededError(`${call.subBudget} (daily)`, spent, dailyCap, call.estimatedUsd);
       }
     }
     const { rows } = await client.query<{ id: number }>(

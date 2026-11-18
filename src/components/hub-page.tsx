@@ -4,7 +4,7 @@ import { hubFaqs, hubSummary, type Hub } from "@/lib/hubs";
 import { alternates, localePath, messages } from "@/lib/locale";
 import { areasWithEvents, cityLastChange, listCategories, listEvents, type City } from "@/lib/queries";
 import { itemListLd, pageLd } from "@/lib/schema";
-import { EventList, FaqBlock, Hero, HubNav, JsonLd, Link, Updated, type Crumb } from "./ui";
+import { AskBox, EventList, FaqBlock, Hero, HubNav, JsonLd, Link, Updated, type Crumb } from "./ui";
 
 export async function hubMetadata(hub: Hub): Promise<Metadata> {
   // An empty category or area page has nothing to offer a searcher yet.
@@ -30,6 +30,7 @@ export async function HubPage({ city, hub }: { city: City; hub: Hub }) {
     <main>
       <Hero trail={trail} title={hub.heading} tone={hub.kind === "category" ? hub.category!.slug : null}>
         <p className="lead">{hubSummary(hub, city, events, next)}</p>
+        {hub.kind === "home" && <AskBox city={city} />}
       </Hero>
       <div className="wrap page">
         <HubNav city={city} categories={categories} current={hub.path} />

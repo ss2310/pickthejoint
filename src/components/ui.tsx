@@ -133,6 +133,21 @@ export function FaqBlock({ faqs }: { faqs: Faq[] }) {
   );
 }
 
+/** The plain-words search box (Prompt 7): an ordinary GET form to the city's search page, no script. */
+export function AskBox({ city, query, id = "q" }: { city: City; query?: string; id?: string }) {
+  const m = messages().search;
+  return (
+    <form method="get" action={localePath(`/${city.slug}/search`)} className="ask" role="search">
+      <label htmlFor={id}>{m.askLabel}</label>
+      <div className="ask-row">
+        <input id={id} type="search" name="q" defaultValue={query} placeholder={m.askPlaceholder} maxLength={200} autoComplete="off" />
+        <button type="submit" className="button">{m.askButton}</button>
+      </div>
+      <p className="small ask-hint">{m.askHint}</p>
+    </form>
+  );
+}
+
 /** Links between a city's hubs, shown on every hub page. */
 export function HubNav({ city, categories, current }: { city: City; categories: Named[]; current: string }) {
   const base = `/${city.slug}`;

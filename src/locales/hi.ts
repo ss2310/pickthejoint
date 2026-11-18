@@ -3,7 +3,7 @@
  * Words people actually use for a night out are kept ("इवेंट", "टिकट",
  * "बुकिंग", "वीकेंड") instead of formal coinages.
  */
-import type { Faq, FaqInput, HubKind, HubText, HubTextInput, Messages, SummaryInput } from "./en";
+import type { Faq, FaqInput, HubKind, HubText, HubTextInput, Messages, SummaryInput, Understood } from "./en";
 
 const hai = (n: number) => (n === 1 ? "है" : "हैं");
 const listJoin = (items: string[]) => (items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} और ${items[items.length - 1]}`);
@@ -233,6 +233,23 @@ export const hi: Messages = {
     status: (n: number, applied: string[], city: string) =>
       `${n} इवेंट ${n === 1 ? "मिला" : "मिले"}${applied.length ? `: ${applied.join(", ")}।` : `: ${city} में आगे होने वाला सब कुछ।`}`,
     empty: "इन फ़िल्टर से कोई लिस्टेड इवेंट नहीं मिला। तारीख़ों का दायरा बढ़ाकर या फ़िल्टर कम करके देखें।",
+    askLabel: "अपने शब्दों में खोजें",
+    askPlaceholder: "जैसे: इस शनिवार कॉमेडी, या आज फ़्री इवेंट",
+    askButton: "खोजें",
+    askHint: "हिंदी, अंग्रेज़ी या हिंग्लिश में: “इस वीकेंड संगीत”, “aaj kya hai”, “standup this weekend”।",
+    filtersHeading: "या फ़िल्टर चुनें",
+    understood(u: Understood): string {
+      const quote = (w: string[]) => w.map((x) => `“${x}”`).join(u.anyWords ? " या " : " ");
+      const when = u.when && ({
+        today: "आज होने वाले", tonight: "आज रात होने वाले", tomorrow: `कल (${u.when.from}) होने वाले`, day: `${u.when.from} को`, range: `${u.when.from} से ${u.when.to} तक`,
+      })[u.when.kind];
+      const parts = [when, u.area && `${u.area} में`, u.price === "free" ? "फ़्री एंट्री वाले" : u.price === "paid" ? "टिकट वाले" : "",
+        u.words?.length ? `${quote(u.words)} ${u.anyWords ? "में से किसी से" : "से"} मिलते` : "", u.category ? `${u.category} इवेंट` : "इवेंट"].filter(Boolean);
+      return parts.length === 1 ? "हमें तारीख़, श्रेणी या जगह समझ नहीं आई, इसलिए आगे होने वाले सभी इवेंट दिखा रहे हैं।"
+        : `हमने इसे ऐसे समझा: ${parts.join(" ")}।`;
+    },
+    relaxed: (words: string[]) => `किसी लिस्टेड इवेंट में ${words.map((w) => `“${w}”`).join(" ")} नहीं मिला, इसलिए बाक़ी खोज से मिलते इवेंट दिखा रहे हैं।`,
+    found: (n: number) => `${n} इवेंट ${n === 1 ? "मिला" : "मिले"}।`,
   },
   notFound: {
     title: "यह पेज यहाँ नहीं है",

@@ -9,7 +9,7 @@ const BUDGET_NAMES: Record<string, string> = {
   scrape: "Scrape and other cash spend (SCRAPE_BUDGET_USD)", model: "Claude API (MODEL_BUDGET_USD)",
   reelTranscript: "inside scrape: reel transcripts", googleEvents: "inside scrape: Google event results",
   newsCalendars: "inside model: news roundups", enrichment: "inside model: enrichment", translation: "inside model: Hindi translation",
-  submissions: "inside model: public submissions",
+  submissions: "inside model: public submissions", search: "inside model: search parsing (also capped per day)",
 };
 
 export default async function Overview({ searchParams }: { searchParams: Promise<{ msg?: string; setup?: string }> }) {

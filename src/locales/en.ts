@@ -12,6 +12,16 @@ export interface HubText { heading: string; title: string; description: string }
 export interface SummaryInput { kind: HubKind; city: string; category?: string; area?: string; count: number; picks: string[]; free: number; next?: string }
 export interface FaqInput { kind: HubKind; city: string; category?: string; area?: string; count: number; lines: string[]; freeCount: number; freeLines: string[] }
 export interface Faq { question: string; answer: string }
+/** How a plain-words search was read, ready to be put into a sentence. Dates are already written out. */
+export interface Understood {
+  category?: string;
+  when?: { kind: "today" | "tonight" | "tomorrow" | "day" | "range"; from: string; to: string };
+  area?: string;
+  price?: "free" | "paid";
+  words?: string[];
+  /** The words are leftovers the search did not understand: any of them may match. */
+  anyWords?: boolean;
+}
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const listJoin = (items: string[]) => (items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`);
@@ -251,6 +261,24 @@ export const en = {
     status: (n: number, applied: string[], city: string) =>
       `${plural(n, "event")} ${n === 1 ? "matches" : "match"}${applied.length ? `: ${applied.join(", ")}.` : `: everything coming up in ${city}.`}`,
     empty: "No listed events match these filters. Try a wider date range or fewer filters.",
+    askLabel: "Search in your own words",
+    askPlaceholder: "e.g. comedy this Saturday, or free events today",
+    askButton: "Search",
+    askHint: "English, Hindi or Hinglish: “standup this weekend”, “aaj kya hai”, “इस शनिवार संगीत”.",
+    filtersHeading: "Or choose filters",
+    understood(u: Understood): string {
+      const quote = (w: string[]) => w.map((x) => `“${x}”`).join(u.anyWords ? " or " : " ");
+      const noun = u.category ? `${u.category.toLowerCase()}${/events?$/i.test(u.category) ? "" : " events"}` : "events";
+      const when = u.when && ({
+        today: "today", tonight: "tonight", tomorrow: `tomorrow (${u.when.from})`, day: `on ${u.when.from}`, range: `from ${u.when.from} to ${u.when.to}`,
+      })[u.when.kind];
+      const parts = [noun, when, u.area && `in ${u.area}`, u.price === "free" ? "with free entry" : u.price === "paid" ? "with paid entry" : "",
+        u.words?.length ? `mentioning ${u.anyWords ? "any of " : ""}${quote(u.words)}` : ""].filter(Boolean);
+      return parts.length === 1 ? "We could not pick out a date, category or place, so here is everything coming up."
+        : `We read this as: ${parts.join(" ")}.`;
+    },
+    relaxed: (words: string[]) => `No listed event mentions ${words.map((w) => `“${w}”`).join(" ")}, so these match the rest of your search.`,
+    found: (n: number) => `${plural(n, "event")} ${n === 1 ? "matches" : "match"}.`,
   },
   notFound: {
     title: "This page is not here",
