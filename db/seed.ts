@@ -3,8 +3,16 @@
  * Adding a city later = add it here (or insert rows directly), plus its areas.
  * Usage: npm run db:seed
  */
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import type { Pool } from "pg";
 import { getPool, closePool } from "../src/lib/db";
+
+/** The owner-approved citation questions (Prompt 8): { city: { en: [...], hi: [...] } }. */
+export function citationQuestions(): Record<string, Record<"en" | "hi", string[]>> {
+  const raw = JSON.parse(readFileSync(path.join(__dirname, "..", "data", "citation-queries.json"), "utf8")) as Record<string, unknown>;
+  return Object.fromEntries(Object.entries(raw).filter(([k]) => !k.startsWith("_"))) as Record<string, Record<"en" | "hi", string[]>>;
+}
 
 export const seedCities = [{ slug: "indore", name: "Indore", state: "Madhya Pradesh", is_live: true }];
 
@@ -74,6 +82,23 @@ export async function seed(pool: Pool): Promise<void> {
          ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, sort_order = EXCLUDED.sort_order`,
         [slug, name, order++],
       );
+    }
+    // Citation questions: the file is the list. A question no longer in it is switched off, never deleted
+    // (its past results stay comparable).
+    for (const [citySlug, byLocale] of Object.entries(citationQuestions())) {
+      const city = (await client.query<{ id: number }>("SELECT id FROM cities WHERE slug = $1", [citySlug])).rows[0];
+      if (!city) continue;
+      const keep: number[] = [];
+      for (const locale of ["en", "hi"] as const) {
+        for (const [i, query] of (byLocale[locale] ?? []).entries()) {
+          const { rows } = await client.query<{ id: number }>(
+            `INSERT INTO citation_queries (city_id, locale, query, position, active) VALUES ($1,$2,$3,$4,true)
+             ON CONFLICT (city_id, locale, query) DO UPDATE SET position = EXCLUDED.position, active = true RETURNING id`,
+            [city.id, locale, query, i + 1]);
+          keep.push(rows[0].id);
+        }
+      }
+      await client.query("UPDATE citation_queries SET active = false WHERE city_id = $1 AND NOT (id = ANY($2::bigint[]))", [city.id, keep]);
     }
     await client.query("COMMIT");
   } catch (err) {
