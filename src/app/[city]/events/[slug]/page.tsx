@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Breadcrumbs, EventList, JsonLd, priceLabel } from "@/components/ui";
 import { clock, longDate, stamp } from "@/lib/format";
 import { getEvent, listEvents, type EventDetail } from "@/lib/queries";
-import { eventLd, eventPath, venuePath } from "@/lib/schema";
+import { abs, eventImagePath, eventLd, eventPath, ids, pageLd, venuePath } from "@/lib/schema";
 
 // Rebuilt at most every 10 minutes, so a change to the event (new time, cancellation) reaches the page quickly.
 export const revalidate = 600;
@@ -46,7 +46,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title,
     description: metaDescription(e),
     alternates: { canonical: eventPath(e) },
-    openGraph: { title, description: metaDescription(e), url: eventPath(e), type: "article" },
+    openGraph: {
+      title, description: metaDescription(e), url: eventPath(e), type: "article",
+      images: [{ url: eventImagePath(e, "16x9"), width: 1200, height: 675, alt: `${e.title}: date, venue and city` }],
+    },
+    twitter: { card: "summary_large_image", images: [eventImagePath(e, "16x9")] },
   };
 }
 
@@ -120,6 +124,11 @@ export default async function EventPage({ params }: Props) {
             <span className="block muted small">Pick the Joint does not sell tickets. This link goes to the organiser&apos;s booking page.</span></p>
         )}
 
+        <p className="actions">
+          <a href={`${eventPath(e)}/calendar.ics`}>Add to calendar</a>
+          <a href={`https://wa.me/?text=${encodeURIComponent(`${e.title}, ${whenText(e)}${e.venue_name ? `, ${e.venue_name}` : ""}. ${abs(eventPath(e))}`)}`} rel="noopener nofollow">Share on WhatsApp</a>
+        </p>
+
         {e.description && <section aria-labelledby="about-heading"><h2 id="about-heading">About this event</h2><p>{e.description}</p></section>}
 
         <section aria-labelledby="source-heading" className="provenance">
@@ -142,7 +151,8 @@ export default async function EventPage({ params }: Props) {
       {alike.length > 0 && (
         <section aria-labelledby="alike-more"><h2 id="alike-more">More {e.category_name!.toLowerCase()} in {e.city_name}</h2><EventList events={alike} empty="" /></section>
       )}
-      <JsonLd data={eventLd(e)} />
+      <p className="muted small updated">Updated <time dateTime={e.updated_at.toISOString()}>{stamp(e.updated_at, e.timezone)}</time>.</p>
+      <JsonLd data={[eventLd(e), pageLd(eventPath(e), e.title, e.updated_at, ids.event(eventPath(e)))]} />
     </main>
   );
 }

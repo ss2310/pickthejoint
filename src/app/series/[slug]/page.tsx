@@ -4,7 +4,7 @@ import { Breadcrumbs, EventList, ExternalLinks, JsonLd } from "@/components/ui";
 import { displayTimeZone } from "@/config";
 import { plural, stamp } from "@/lib/format";
 import { getSeries, listEvents } from "@/lib/queries";
-import { officialLinks, seriesLd } from "@/lib/schema";
+import { ids, officialLinks, pageLd, seriesLd } from "@/lib/schema";
 
 // Recurring festivals and annual events. The page is permanent; each year's events attach to it.
 export const revalidate = 600;
@@ -23,6 +23,7 @@ export default async function SeriesPage({ params }: Props) {
   if (!s) notFound();
   const [upcoming, past] = await Promise.all([listEvents({ seriesId: s.id }), listEvents({ seriesId: s.id, when: "past", limit: 100 })]);
   const links = officialLinks(s.official_links, null);
+  const modified = [...upcoming, ...past].reduce((max, e) => (e.updated_at > max ? e.updated_at : max), s.updated_at);
   return (
     <main>
       <Breadcrumbs trail={[{ name: s.name, path: `/series/${s.slug}` }]} />
@@ -38,8 +39,8 @@ export default async function SeriesPage({ params }: Props) {
       </section>
       {past.length > 0 && <section aria-labelledby="past-heading"><h2 id="past-heading">Past editions</h2><EventList events={past} empty="" /></section>}
       {links.length > 0 && <section aria-labelledby="links-heading"><h2 id="links-heading">Official links</h2><ExternalLinks links={links} /></section>}
-      <p className="muted small">Page last changed <time dateTime={s.updated_at.toISOString()}>{stamp(s.updated_at, displayTimeZone)}</time>.</p>
-      <JsonLd data={seriesLd(s)} />
+      <p className="muted small updated">Updated <time dateTime={modified.toISOString()}>{stamp(modified, displayTimeZone)}</time>.</p>
+      <JsonLd data={[seriesLd(s), pageLd(`/series/${s.slug}`, s.name, modified, ids.series(s.slug))]} />
     </main>
   );
 }

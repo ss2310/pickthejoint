@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { displayTimeZone } from "@/config";
 import { plural, stamp } from "@/lib/format";
 import { listEvents, type EventCard, type PersonDetail } from "@/lib/queries";
-import { officialLinks, type Ld } from "@/lib/schema";
+import { ids, officialLinks, pageLd, type Ld } from "@/lib/schema";
 import { Breadcrumbs, EventList, ExternalLinks, JsonLd } from "./ui";
 
 export interface EntityKind {
@@ -41,6 +41,7 @@ export async function entityMetadata(kind: EntityKind, p: PersonDetail): Promise
 export async function EntityPage({ kind, p }: { kind: EntityKind; p: PersonDetail }) {
   const { upcoming, past } = await events(kind, p);
   const links = officialLinks(p.official_links, p.same_as);
+  const modified = [...upcoming, ...past].reduce((max, e) => (e.updated_at > max ? e.updated_at : max), p.updated_at);
   const descriptor = [p.genre, p.hometown ? `from ${p.hometown}` : null].filter(Boolean).join(", ");
 
   return (
@@ -67,11 +68,11 @@ export async function EntityPage({ kind, p }: { kind: EntityKind; p: PersonDetai
           <ul className="links">{p.sources.map((s) => <li key={s.url}><a href={s.url} rel="noopener nofollow">{s.title ?? s.url}</a></li>)}</ul>
         </section>
       )}
-      <p className="muted small">
-        Page last changed <time dateTime={p.updated_at.toISOString()}>{stamp(p.updated_at, displayTimeZone)}</time>.
+      <p className="muted small updated">
+        Updated <time dateTime={modified.toISOString()}>{stamp(modified, displayTimeZone)}</time>.
         {" "}Only professional, public facts are listed here.
       </p>
-      <JsonLd data={kind.ld(p)} />
+      <JsonLd data={[kind.ld(p), pageLd(`/${kind.base}/${p.slug}`, p.name, modified, kind.base === "artists" ? ids.artist(p.slug) : ids.organiser(p.slug))]} />
     </main>
   );
 }

@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
+import { JsonLd } from "@/components/ui";
 import { site } from "@/config";
+import { siteLd } from "@/lib/schema";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -35,6 +37,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <Link href="/changelog">Changelog</Link>
           </nav>
         </footer>
+        <JsonLd data={siteLd()} />
       </body>
     </html>
   );

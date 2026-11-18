@@ -125,6 +125,8 @@ export interface ScrapeReport {
   estimatedUsd: number;
   spentUsd: number;
   errors: string[];
+  /** Runs that had to use the fallback actor because the main one failed twice in a row. */
+  fallbackRuns: number;
   /** Handles the actor returned no posts and no named error for: a wrong handle, or nothing recent. */
   handlesWithNothing: string[];
 }
@@ -164,7 +166,7 @@ export async function scrapeInstagram(
   const due = await dueHandles(pool, opts);
   const report: ScrapeReport = {
     handlesDue: due.length, handlesChecked: 0, actorRuns: 0, postsReturned: 0, postsNew: 0,
-    postsAlreadyStored: 0, estimatedUsd: 0, spentUsd: 0, errors: [], handlesWithNothing: [],
+    postsAlreadyStored: 0, estimatedUsd: 0, spentUsd: 0, errors: [], fallbackRuns: 0, handlesWithNothing: [],
   };
   if (due.length === 0) return report;
   if (!opts.dryRun && !apify.instagramPostsActorId) throw new Error("APIFY_IG_POSTS_ACTOR_ID (or APIFY_ACTOR_ID) is not set");
@@ -194,8 +196,23 @@ export async function scrapeInstagram(
           units: maxPosts, unitLabel: "posts", estimatedUsd: estimate, jobName: opts.jobName, dryRun: opts.dryRun,
         },
         async () => {
-          const run = await client.runActor(apify.instagramPostsActorId, buildActorInput(apify.instagramPostsActorId, names, newerThan),
-            { maxChargeUsd: estimate, maxItems: maxPosts });
+          const attempt = (actorId: string) =>
+            client.runActor(actorId, buildActorInput(actorId, names, newerThan), { maxChargeUsd: estimate, maxItems: maxPosts });
+          let run;
+          try {
+            run = await attempt(apify.instagramPostsActorId);
+          } catch (first) {
+            console.warn(`[scrape] actor failed, retrying once: ${(first as Error).message}`);
+            try {
+              run = await attempt(apify.instagramPostsActorId);
+            } catch (second) {
+              // Two failures in a row: switch to the fallback actor for this run, if one is configured.
+              if (!apify.instagramPostsFallbackActorId) throw second;
+              console.warn(`[scrape] actor failed twice, using fallback ${apify.instagramPostsFallbackActorId}: ${(second as Error).message}`);
+              run = await attempt(apify.instagramPostsFallbackActorId);
+              report.fallbackRuns++;
+            }
+          }
           return { result: run.items, actualUsd: run.items.length * apify.usdPerPost, units: run.items.length };
         },
         { pool },

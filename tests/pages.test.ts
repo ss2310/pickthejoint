@@ -148,7 +148,8 @@ describe("structured data", () => {
     expect(cancelled.eventStatus).toBe("https://schema.org/EventCancelled");
     const workshop = eventLd(await bySlug("Block Printing Workshop"));
     expect(String(workshop.startDate)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(workshop.offers).toBeUndefined(); // no booking link and not free: nothing to offer
+    // No booking link, but a stated price: the offer points at our own page.
+    expect(workshop.offers).toMatchObject({ price: 1200, priceCurrency: "INR", url: String(workshop.url) });
     const free = eventLd(await bySlug("Open Mic Night"));
     expect(free.offers).toMatchObject({ price: 0, priceCurrency: "INR" });
     for (const ld of [cancelled, workshop, free]) expect(problems(ld)).toEqual([]);

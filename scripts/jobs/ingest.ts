@@ -13,7 +13,9 @@
 import { main } from "../../src/lib/pipeline/job";
 import { HttpApifyClient } from "../../src/lib/pipeline/apify";
 import { AnthropicLlm } from "../../src/lib/pipeline/llm";
-import { scrapeInstagram } from "../../src/lib/pipeline/scrape";
+import { sendAlert, unexpectedlyEmpty } from "../../src/lib/alerts";
+import { pingIndexNow } from "../../src/lib/indexnow";
+import { scrapeInstagram, type ScrapeReport } from "../../src/lib/pipeline/scrape";
 import { fetchGoogleEvents, fetchNewsCalendars } from "../../src/lib/pipeline/sources";
 import { processPosts } from "../../src/lib/pipeline/process";
 import { ingestion } from "../../src/config";
@@ -35,5 +37,27 @@ main("ingest", async (pool, report, args) => {
   if (!args.processOnly && args.sources.includes("news")) {
     report.news = await fetchNewsCalendars(pool, llm, { jobName, dryRun: args.dryRun, city: args.city });
   }
-  report.pipeline = await processPosts(pool, { llm, apify }, { jobName, dryRun: args.dryRun, batch: args.batch, expectedNewPosts });
+  const pipeline = await processPosts(pool, { llm, apify }, { jobName, dryRun: args.dryRun, batch: args.batch, expectedNewPosts });
+  report.pipeline = pipeline;
+  if (args.dryRun) return;
+
+  report.indexNow = await pingIndexNow(pool);
+
+  // A run that checked handles but found no events, when recent runs usually found some,
+  // most likely means the scraper has broken without raising an error.
+  const scrape = report.instagram as ScrapeReport | undefined;
+  if (scrape && scrape.handlesChecked > 0) {
+    const { rows } = await pool.query<{ created: number | null }>(
+      `SELECT (report->'pipeline'->'resolve'->>'created')::int AS created FROM job_runs
+       WHERE job_name = 'ingest' AND status = 'ok' AND NOT dry_run AND finished_at IS NOT NULL
+         AND (report->'instagram'->>'handlesChecked')::int > 0
+       ORDER BY id DESC LIMIT 7`);
+    const found = pipeline.resolve.created + pipeline.resolve.merged;
+    if (unexpectedlyEmpty(found, rows.map((r) => r.created ?? 0))) {
+      report.alert = await sendAlert("The ingest job found no events",
+        `Today's run checked ${scrape.handlesChecked} handle(s) and fetched ${scrape.postsNew} new post(s) but found no events, although recent runs usually find some.\n\n` +
+        `Posts returned by the actor: ${scrape.postsReturned}. Actor errors: ${scrape.errors.join("; ") || "none"}.\n` +
+        "If the actor returned nothing, check it on Apify: Instagram scrapers break when Instagram changes.");
+    }
+  }
 });

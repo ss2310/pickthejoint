@@ -10,7 +10,7 @@ export const metadata = pageMeta("Corrections and takedown",
 export default function Corrections() {
   const email = site.contactEmail;
   return (
-    <Editorial title="Corrections and takedown" path="/corrections">
+    <Editorial title="Corrections and takedown" path="/corrections" updated="2026-11-18">
       <p className="lead">
         If a listing is wrong, out of date, or about you or your event and you want it changed or removed, tell us and we will act on it.
       </p>

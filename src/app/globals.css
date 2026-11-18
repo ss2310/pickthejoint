@@ -91,6 +91,8 @@ main { padding-top: 1.5rem; padding-bottom: 3rem; }
 .button + .block { margin-top: 0.5rem; }
 .banner { background: var(--surface); border-left: 4px solid var(--muted); padding: 0.75rem 1rem; }
 .banner-warn { background: var(--warn-bg); color: var(--warn-fg); border-left-color: var(--warn-fg); }
+.actions { display: flex; flex-wrap: wrap; gap: 0.4rem 1.25rem; font-size: 0.95rem; }
+.updated { margin-top: 2rem; }
 .provenance ul, .links { padding-left: 1.1rem; margin: 0 0 0.75rem; }
 
 /* FAQ */

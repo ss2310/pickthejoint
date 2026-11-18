@@ -1,5 +1,6 @@
 import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 import { aiCrawlers } from "@/config";
+import { CHECK_HEADER } from "@/lib/crawl-check";
 import { getPool } from "@/lib/db";
 
 /**
@@ -22,7 +23,7 @@ export function crawlerToken(userAgent: string | null): string | null {
 
 export function middleware(req: NextRequest, event: NextFetchEvent) {
   const agent = crawlerToken(req.headers.get("user-agent"));
-  if (agent) {
+  if (agent && !req.headers.has(CHECK_HEADER)) {
     event.waitUntil(
       getPool()
         .query("INSERT INTO crawler_log (agent, path) VALUES ($1, $2)", [agent, req.nextUrl.pathname.slice(0, 500)])

@@ -104,7 +104,7 @@ export function HubNav({ city, categories, current }: { city: City; categories: 
 
 export function Updated({ at, timeZone }: { at: Date | null; timeZone: string }) {
   if (!at) return null;
-  return <p className="muted small">Listings last changed <time dateTime={at.toISOString()}>{stamp(at, timeZone)}</time>.</p>;
+  return <p className="muted small updated">Updated <time dateTime={at.toISOString()}>{stamp(at, timeZone)}</time>.</p>;
 }
 
 export function ExternalLinks({ links }: { links: string[] }) {
