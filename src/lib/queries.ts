@@ -209,7 +209,7 @@ export interface VenueDetail extends Named {
 export interface EntitySource { url: string; title: string | null; facts: string[] }
 
 /** Sources for an entity page, one row per page, in the order they were first stored. */
-const entitySources = (type: "venue" | "artist" | "organiser", idColumn: string) => `
+const entitySources = (type: "venue" | "artist" | "organiser" | "series", idColumn: string) => `
   coalesce((SELECT json_agg(json_build_object('url', s.url, 'title', s.title, 'facts', s.facts) ORDER BY s.first_id)
             FROM (SELECT es.url, max(es.title) AS title, min(es.id) AS first_id,
                          coalesce(array_agg(DISTINCT es.fact) FILTER (WHERE es.fact IS NOT NULL), '{}') AS facts
@@ -254,11 +254,14 @@ async function getPerson(table: "artists" | "organisers", join: "event_artists" 
 export const getArtist = (slug: string, locale: Locale = getLocale()) => getPerson("artists", "event_artists", "artist_id", slug, locale);
 export const getOrganiser = (slug: string, locale: Locale = getLocale()) => getPerson("organisers", "event_organisers", "organiser_id", slug, locale);
 
-export interface SeriesDetail extends Named { description: string | null; recurrence: string | null; official_links: Record<string, string>; updated_at: Date }
+export interface SeriesDetail extends Named {
+  description: string | null; recurrence: string | null; official_links: Record<string, string>; updated_at: Date; sources: EntitySource[];
+}
 export async function getSeries(slug: string, locale: Locale = getLocale()): Promise<SeriesDetail | null> {
   const st = (field: string) => `${tr(locale, "series", "s.id", field, `s.${field}`)} AS ${field}`;
   const { rows } = await getPool().query<SeriesDetail>(
-    `SELECT s.id, s.slug, ${st("name")}, ${st("description")}, ${st("recurrence")}, s.official_links, s.updated_at FROM series s WHERE s.slug = $1`, [slug]);
+    `SELECT s.id, s.slug, ${st("name")}, ${st("description")}, ${st("recurrence")}, s.official_links, s.updated_at, ${entitySources("series", "s.id")}
+     FROM series s WHERE s.slug = $1`, [slug]);
   return rows[0] ?? null;
 }
 

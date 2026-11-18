@@ -45,15 +45,30 @@ export async function lastRuns(pool: Pool = getPool()): Promise<JobRun[]> {
 }
 
 export async function suggestedHandles(pool: Pool = getPool()) {
-  return (await pool.query<{ id: number; handle: string; city: string | null; reason: string | null; seen_count: number; first_seen_post: string | null; created_at: Date }>(
-    `SELECT s.id, s.handle, c.slug AS city, s.reason, s.seen_count, s.first_seen_post, s.created_at
+  return (await pool.query<{
+    id: number; handle: string; city: string | null; reason: string | null; seen_count: number; first_seen_post: string | null; created_at: Date;
+    via: string[]; event_posts: number; last_seen_at: Date | null;
+  }>(
+    `SELECT s.id, s.handle, c.slug AS city, s.reason, s.seen_count, s.first_seen_post, s.created_at, s.via, s.event_posts, s.last_seen_at
      FROM suggested_handles s LEFT JOIN cities c ON c.id = s.city_id WHERE s.status = 'pending' ORDER BY s.seen_count DESC, s.created_at DESC LIMIT 200`)).rows;
 }
 
 export async function handles(pool: Pool = getPool()) {
-  return (await pool.query<{ id: number; handle: string; handle_type: string; city: string; tier: "A" | "B"; active: boolean; last_checked_at: Date | null }>(
-    `SELECT h.id, h.handle, h.handle_type, c.slug AS city, h.tier, h.active, h.last_checked_at
+  return (await pool.query<{
+    id: number; handle: string; handle_type: string; city: string; tier: "A" | "B"; active: boolean; last_checked_at: Date | null;
+    tier_set_by: string; paused_reason: string | null; events30: number;
+  }>(
+    `SELECT h.id, h.handle, h.handle_type, c.slug AS city, h.tier, h.active, h.last_checked_at, h.tier_set_by, h.paused_reason,
+            (SELECT count(DISTINCT s.event_id) FROM raw_posts rp JOIN sources s ON s.raw_post_id = rp.id
+              WHERE rp.handle = h.handle AND rp.source_kind = 'instagram' AND s.observed_at >= now() - interval '30 days')::int AS events30
      FROM handles h JOIN cities c ON c.id = h.city_id ORDER BY h.active DESC, h.tier, h.handle`)).rows;
+}
+
+/** Automatic tier and pause changes, newest first. */
+export async function handleChanges(pool: Pool = getPool(), limit = 30) {
+  return (await pool.query<{ handle: string; changed_at: Date; from_tier: string | null; to_tier: string | null; to_active: boolean | null; reason: string }>(
+    `SELECT h.handle, hc.changed_at, hc.from_tier, hc.to_tier, hc.to_active, hc.reason
+     FROM handle_changes hc JOIN handles h ON h.id = hc.handle_id ORDER BY hc.changed_at DESC, hc.id DESC LIMIT $1`, [limit])).rows;
 }
 
 export interface PosterRow {

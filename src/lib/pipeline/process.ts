@@ -32,7 +32,7 @@ export interface ProcessOptions {
 
 interface RawRow {
   id: number; shortcode: string; handle: string; post_url: string; post_type: string | null; caption: string | null;
-  media_urls: string[]; tagged_handles: string[]; posted_at: Date | null; fetched_at: Date; source_kind: "instagram" | "google" | "news";
+  media_urls: string[]; tagged_handles: string[]; posted_at: Date | null; fetched_at: Date; source_kind: "instagram" | "google" | "news" | "web" | "facebook";
   filter_result: FilterLabel | null; extraction: Extraction | null; transcript: string | null;
   transcript_requested_at: Date | null; city_id: number; city_name: string; timezone: string; handle_type: string | null;
 }
@@ -46,6 +46,14 @@ const RAW_SELECT = `
   JOIN cities c ON c.id = coalesce(rp.city_id, h.city_id)`;
 
 const usd = (n: number) => Number(n.toFixed(4));
+
+/** Adds a model call's cost to the item it was for, so cost per event can be reported by source. */
+async function charge(pool: Pool, rawPostId: number | string, amount: number) {
+  if (amount > 0) await pool.query("UPDATE raw_posts SET model_usd = model_usd + $2 WHERE id = $1", [Number(rawPostId), amount]);
+}
+
+/** Where a raw post came from, for per-source counts: "instagram", or "<kind>:<source key>". */
+export const sourceLabel = (kind: string, handle: string) => (kind === "instagram" ? "instagram" : `${kind}:${handle}`);
 
 async function cityLists(pool: Pool) {
   const areas = await pool.query<{ city_id: number; name: string }>("SELECT city_id, name FROM areas ORDER BY name");
@@ -103,6 +111,8 @@ export async function processPosts(pool: Pool, deps: Deps, opts: ProcessOptions)
     extraction: { posts: 0, failed: 0, eventsFound: 0, notEvents: 0, modelUsd: 0 },
     transcripts: { requested: 0, empty: 0, filledAMissingField: 0, scrapeUsd: 0 },
     resolve: emptyCounts(),
+    /** Per source: events created (new), merged into a known event, queued for review, out of city. */
+    bySource: {} as Record<string, { created: number; merged: number; queued: number; outOfCity: number; statusUpdates: number }>,
     descriptions: { written: 0, failed: 0, modelUsd: 0 },
     eventsPublished: 0,
     cityAudit: undefined as AuditReport | undefined,
@@ -152,6 +162,7 @@ export async function processPosts(pool: Pool, deps: Deps, opts: ProcessOptions)
   const answerById = new Map(answers.map((a) => [a.id, a]));
   report.filter.askedModel = answers.length;
   report.filter.modelUsd = usd(answers.reduce((s, a) => s + a.usd, 0));
+  for (const a of answers) await charge(pool, a.id, a.usd);
   for (const { row, verdict } of verdicts) {
     let label: FilterLabel;
     if (verdict !== "unclear") label = verdict;
@@ -182,6 +193,7 @@ export async function processPosts(pool: Pool, deps: Deps, opts: ProcessOptions)
   report.extraction.posts = firstPass.length;
   for (const r of firstPass) {
     report.extraction.modelUsd += r.usd;
+    await charge(pool, r.id, r.usd);
     if (r.ok && r.data) { extracted.set(Number(r.id), r.data); continue; }
     report.extraction.failed++;
     await pool.query("UPDATE raw_posts SET processing_state = 'error', error = $2, processed_at = now() WHERE id = $1", [Number(r.id), r.error ?? "extraction failed"]);
@@ -221,6 +233,7 @@ export async function processPosts(pool: Pool, deps: Deps, opts: ProcessOptions)
     const second = await llm.run(retry.map((t) => extractionRequest(inputs.get(t.row.id)!)), run);
     for (const r of second) {
       report.extraction.modelUsd += r.usd;
+      await charge(pool, r.id, r.usd);
       if (!r.ok || !r.data) continue; // keep the first extraction
       const before = retry.find((t) => String(t.row.id) === r.id)!.before;
       if ([...confidentFields(r.data)].some((f) => !before.has(f))) report.transcripts.filledAMissingField++;
@@ -240,7 +253,16 @@ export async function processPosts(pool: Pool, deps: Deps, opts: ProcessOptions)
       postUrl: row.post_url, postedAt: row.posted_at ?? row.fetched_at, shortcode: row.shortcode, cityId: row.city_id,
       cityName: row.city_name, timeZone: row.timezone, taggedHandles: row.tagged_handles ?? [],
     };
+    const before = { ...report.resolve };
     const state = await resolvePost(pool, llm, ctx, row.extraction!, opts.jobName, report.resolve);
+    const label = sourceLabel(row.source_kind, row.handle);
+    const b = (report.bySource[label] ??= { created: 0, merged: 0, queued: 0, outOfCity: 0, statusUpdates: 0 });
+    b.created += report.resolve.created - before.created;
+    b.merged += report.resolve.merged - before.merged - (report.resolve.statusUpdates - before.statusUpdates);
+    b.statusUpdates += report.resolve.statusUpdates - before.statusUpdates;
+    b.queued += report.resolve.queued - before.queued;
+    b.outOfCity += report.resolve.outOfCity - before.outOfCity;
+    await charge(pool, row.id, report.resolve.dedupModelUsd - before.dedupModelUsd);
     if (state === "filtered_out") report.extraction.notEvents++;
     await pool.query("UPDATE raw_posts SET processing_state = $2, processed_at = now() WHERE id = $1", [row.id, state]);
   }

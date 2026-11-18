@@ -19,7 +19,7 @@ export interface JobArgs {
   force: boolean;
   /** Cap on handles checked in this run. */
   limit?: number;
-  /** Which sources to run: instagram, google, news. */
+  /** Which sources to run: instagram, google, news, web, facebook, discovery. */
   sources: string[];
   /** Skip fetching; only process posts already stored. */
   processOnly: boolean;
@@ -31,7 +31,15 @@ export interface JobArgs {
   slugs?: string[];
   /** Fail on purpose, to prove the failure alert arrives. */
   failOnPurpose: boolean;
+  /** Wider sourcing checks: read at most this many new items (pages, events, posts) per source. */
+  maxItems?: number;
+  /** Housekeeping: re-tier handles now instead of waiting for the first of the month. */
+  retier: boolean;
+  /** Housekeeping: store last week's coverage report now instead of waiting for Monday. */
+  coverage: boolean;
 }
+
+export const ALL_SOURCES = ["instagram", "google", "news", "web", "facebook", "discovery"];
 
 export function parseArgs(argv: string[]): JobArgs {
   const value = (name: string) => {
@@ -49,12 +57,15 @@ export function parseArgs(argv: string[]): JobArgs {
     handles: list("handles")?.map((h) => h.replace(/^@/, "")),
     force: argv.includes("--force"),
     limit: limit ? Number(limit) : undefined,
-    sources: list("sources") ?? ["instagram", "google", "news"],
+    sources: list("sources") ?? ALL_SOURCES,
     processOnly: argv.includes("--process-only"),
     crawlCheck: argv.includes("--crawl-check"),
     types: list("types"),
     slugs: list("slugs"),
     failOnPurpose: argv.includes("--fail-on-purpose") || process.env.FAIL_ON_PURPOSE === jobNameFromArgv(),
+    maxItems: value("max-items") ? Number(value("max-items")) : undefined,
+    retier: argv.includes("--retier"),
+    coverage: argv.includes("--coverage"),
   };
 }
 

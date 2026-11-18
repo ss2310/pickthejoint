@@ -109,12 +109,20 @@ export const budgets = {
   citations: num("CITATIONS_BUDGET_USD", 10),
   /** Sub-limit inside "model" for natural-language search: parsing queries the rules cannot read. */
   search: num("SEARCH_BUDGET_USD", 3),
+  /** Sub-limit inside "scrape" for the weekly Instagram hashtag and location pull that finds new handles and venues (Prompt 9). */
+  discovery: num("DISCOVERY_BUDGET_USD", 3),
+  /** Sub-limit inside "scrape" for reading public Facebook event pages through Apify (Prompt 9). */
+  facebookEvents: num("FACEBOOK_EVENTS_BUDGET_USD", 5),
+  /** Sub-limit inside "model" for reading events from web calendars and Facebook events (Prompt 9). */
+  webCalendars: num("WEB_CALENDARS_BUDGET_USD", 3),
   /** Fraction of a cap at which a warning is logged. */
   warnAt: 0.8,
 } as const;
 
 export type BudgetBucket = "scrape" | "model";
-export type SubBudget = "reelTranscript" | "googleEvents" | "newsCalendars" | "enrichment" | "translation" | "submissions" | "search" | "citations";
+export type SubBudget =
+  | "reelTranscript" | "googleEvents" | "newsCalendars" | "enrichment" | "translation" | "submissions" | "search" | "citations"
+  | "discovery" | "facebookEvents" | "webCalendars";
 
 export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   reelTranscript: "scrape",
@@ -125,6 +133,9 @@ export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   submissions: "model",
   search: "model",
   citations: "scrape",
+  discovery: "scrape",
+  facebookEvents: "scrape",
+  webCalendars: "model",
 };
 
 /**
@@ -217,6 +228,86 @@ export const webSources = {
       { key: "patrika", name: "Patrika (Indore)", city: "indore", sectionUrl: "https://www.patrika.com/indore-news",
         articlePattern: "^https://www\\.patrika\\.com/indore-news/[a-z0-9-]+$" },
     ],
+  },
+} as const;
+
+/**
+ * Wider sourcing (Prompt 9). What each city's sources are (census area,
+ * hashtags, web calendars) lives in data/sourcing.json, so adding a city needs
+ * no code change. Every paid call goes through the budget guard with its own
+ * sub-budget above. Terms and robots.txt findings: docs/sources.md.
+ */
+export const sourcing = {
+  userAgent: "PickTheJointBot/1.0 (+https://pickthejoint.com/about)",
+  /** Pause between requests to the same site. */
+  delayMs: 5000,
+  census: {
+    /** OpenStreetMap's Overpass API: free, no account; the data needs attribution ("© OpenStreetMap contributors"). */
+    overpassUrl: process.env.OVERPASS_URL ?? "https://overpass-api.de/api/interpreter",
+    /** OSM tag filters and the venue type each maps to. Only named places are taken. */
+    osmFilters: [
+      { key: "amenity", values: "theatre|arts_centre", type: "auditorium" },
+      { key: "amenity", values: "events_venue|conference_centre|exhibition_centre", type: "hotel_banquet" },
+      { key: "amenity", values: "nightclub|bar|pub", type: "club_bar" },
+      { key: "amenity", values: "cafe", type: "cafe", also: { key: "live_music", value: "yes" } },
+      { key: "tourism", values: "hotel", type: "hotel_banquet" },
+      { key: "shop", values: "mall", type: "mall" },
+      { key: "amenity", values: "college|university", type: "college" },
+      { key: "amenity", values: "community_centre", type: "community" },
+      { key: "tourism", values: "museum|gallery", type: "cultural_centre" },
+      { key: "leisure", values: "stadium", type: "ground" },
+      { key: "landuse", values: "recreation_ground", type: "ground" },
+      { key: "amenity", values: "place_of_worship", type: "religious" },
+    ] as { key: string; values: string; type: string; also?: { key: string; value: string } }[],
+    /** Days without an event after which a venue shows in the admin "no recent event" list. */
+    quietDays: 60,
+  },
+  discovery: {
+    /** Apify actor for hashtag and location pages (the same Instagram actor ingestion uses). */
+    actorId: process.env.APIFY_DISCOVERY_ACTOR_ID ?? "apify/instagram-scraper",
+    /** Hard cap on posts pulled per city per week, across all hashtags and locations. */
+    maxPostsPerWeek: num("DISCOVERY_MAX_POSTS_PER_WEEK", 200),
+    /**
+     * Instagram location tags pulled per week (the most-seen ones first). 0 until a test run shows the
+     * actor returns posts for location pages; it may return only the place's details.
+     */
+    locationsPerWeek: num("DISCOVERY_LOCATIONS_PER_WEEK", 0),
+    everyHours: 6.5 * 24,
+  },
+  facebook: {
+    /** Reads public event pages logged out; no Facebook account is used. */
+    actorId: process.env.APIFY_FACEBOOK_EVENTS_ACTOR_ID ?? "apify/facebook-events-scraper",
+    enabled: process.env.FACEBOOK_EVENTS !== "off",
+    /** Apify's price on the owner's plan, checked 18 Nov 2026: per event returned, plus one charge per run. */
+    usdPerEvent: num("APIFY_USD_PER_FB_EVENT", 0.01),
+    usdPerRun: 0.001,
+    /** Logged out, a page shows about this many upcoming events. */
+    maxEventsPerPage: 8,
+    maxPagesPerRun: num("FACEBOOK_MAX_PAGES_PER_RUN", 60),
+    everyHours: 6.5 * 24,
+  },
+  calendars: {
+    /** Comma-separated calendar keys to switch on; when unset, the `enabled` flags in data/sourcing.json apply. */
+    enabled: process.env.WEB_CALENDARS === undefined
+      ? undefined
+      : process.env.WEB_CALENDARS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
+    /** New items (pages or events) read with the model per source per run. */
+    maxPagesPerRun: 30,
+    /** Pages fetched per source per run, including ones set aside without a model call. */
+    maxFetchesPerRun: 150,
+    /** Characters of page text passed to the extraction model. */
+    maxChars: 9000,
+  },
+  tiering: {
+    /** Events found in the last 30 days that make a handle tier A at the monthly re-tier. */
+    tierAMinEvents: 2,
+    /** A suggested handle credited in at least this many event posts is offered at tier A. */
+    suggestTierAMinEventPosts: 3,
+    /** A handle that has produced no event for this long is paused. */
+    pauseAfterDays: 90,
+    /** A tier the admin set by hand is left alone by the re-tier for this long. */
+    manualHoldDays: 30,
+    everyHours: 27 * 24,
   },
 } as const;
 

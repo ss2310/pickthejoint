@@ -1,0 +1,126 @@
+{
+  "_about": "Recurring festivals seeded as series pages before their dates are announced (Prompt 9). Every sentence of a description rests on a listed source, written in our own words; facts checked 18 Nov 2026. Dates are never stated here: each year's events come from the sources and attach to their series by `aliases` (words in the event title) and `months` (local months an edition can fall in; empty means any). The seed adds and updates these rows; it never deletes one.",
+  "indore": [
+    {
+      "slug": "indore-rangpanchami-ger",
+      "name": "Rangpanchami Ger, Indore",
+      "recurrence": "every year on Rangpanchami, five days after Holi (March)",
+      "months": [3, 4],
+      "aliases": ["rangpanchami", "rang panchami", "ger", "gair"],
+      "description": "Indore's Rangpanchami Ger is a street procession of colour through the old city around Rajwada, held five days after Holi. Tankers and motor pumps spray coloured water over the crowds along the route. The custom is traced to the Holkar rulers, who came out to play Holi with the people, and the Tori Corner Ger marked its 78th year in 2026.",
+      "sources": [
+        { "url": "https://www.incredibleindia.gov.in/en/festivals-and-events/madhya-pradesh/rangpanchami-ger-mahotsav0", "title": "Rangpanchami Ger Mahotsav (Incredible India)", "fact": "Held five days after Holi around Rajwada; coloured water sprayed over the crowds; roots in the Holkar rulers playing Holi with the people" },
+        { "url": "https://www.mptourism.com/gair-festival-in-indore.html", "title": "Gair Festival in Indore (MP Tourism)", "fact": "Routes around Rajwada; tankers and motor pumps throw colour" },
+        { "url": "https://www.freepressjournal.in/indore/indore-news-rajwada-cleared-within-an-hour-after-rang-panchami-gair-mayor-pushyamitra-bhargav-oversees-clean-up", "title": "Free Press Journal, 9 Mar 2026", "fact": "The Tori Corner Ger completed 78 years in 2026" }
+      ]
+    },
+    {
+      "slug": "indore-raag-ameer",
+      "name": "Raag Ameer, Indore",
+      "recurrence": "every year",
+      "months": [],
+      "aliases": ["raag ameer", "rag ameer"],
+      "description": "Raag Ameer is a festival of Indian classical music in Indore, with evening concerts alongside folk and cultural performances. It is held at Ravindra Natya Grah in South Tukoganj, and Madhya Pradesh Tourism lists it with free entry.",
+      "sources": [
+        { "url": "https://www.incredibleindia.gov.in/en/festivals-and-events/madhya-pradesh/raag-ameer", "title": "Raag Ameer (Incredible India)", "fact": "Classical music festival with evening concerts and folk performances; venue Ravindra Natya Grah, South Tukoganj; no ticket needed; source credited to Madhya Pradesh Tourism" }
+      ]
+    },
+    {
+      "slug": "indore-anant-chaturdashi-jhanki",
+      "name": "Anant Chaturdashi jhanki procession, Indore",
+      "recurrence": "every year on Anant Chaturdashi, the last day of Ganesh utsav (September)",
+      "months": [9, 10],
+      "aliases": ["anant chaturdashi", "jhanki", "jhankis"],
+      "description": "On Anant Chaturdashi, the last day of the Ganesh festival, Indore's mills and civic bodies send out decorated jhankis (tableaux) on religious and cultural themes in a procession that starts in the evening and goes on through the night. Hukumchand, Kalyan, Swadeshi and Rajkumar mills take part, along with the municipal corporation and the development authority, and the route runs from the mill area through the old city to Rajwada. The procession was 103 years old in 2026.",
+      "sources": [
+        { "url": "https://www.incredibleindia.gov.in/en/festivals-and-events/madhya-pradesh/annat-chaturdashi", "title": "Anant Chaturdashi (Incredible India)", "fact": "Closes the ten-day Ganesh festival with a procession of decorated jhankis; Malwa Mill area" },
+        { "url": "https://www.freepressjournal.in/indore/shakti-dal-to-guard-biggest-traditional-public-spectacles-as-the-103-year-old-anant-chaturdashi-in-indore", "title": "Free Press Journal, 24 Sep 2026", "fact": "103 years old in 2026; tableaux from Hukumchand, Kalyan, Swadeshi and Rajkumar mills, IMC and IDA; starts in the evening and runs through the night" },
+        { "url": "https://www.freepressjournal.in/indore/indore-1l-to-be-provided-to-tableau-making-mills-anant-chaturdashi-procession-on-september-17", "title": "Free Press Journal, 12 Sep 2024", "fact": "Route from the mill area through MG Road, Krishnapura and Jawahar Marg to Rajwada" }
+      ]
+    },
+    {
+      "slug": "indore-ganesh-utsav",
+      "name": "Ganesh utsav, Indore",
+      "recurrence": "every year, ten days from Ganesh Chaturthi (August or September)",
+      "months": [8, 9],
+      "aliases": ["ganesh utsav", "ganeshotsav", "ganesh chaturthi", "ganpati utsav"],
+      "description": "Indore celebrates Ganesh utsav for ten days, with pandals across the city and the main festivities at Khajrana Ganesh temple, which was built by Ahilyabai Holkar. The temple holds aarti twice a day and a Ganesh Leela during the festival, which ends with the tableaux procession on Anant Chaturdashi.",
+      "sources": [
+        { "url": "https://en.wikipedia.org/wiki/Khajrana_Ganesh_Temple", "title": "Khajrana Ganesh Temple (Wikipedia)", "fact": "Temple in the Khajrana area of Indore, built by Ahilyabai Holkar" },
+        { "url": "https://www.freepressjournal.in/indore/ganesh-chaturthi-2024-10-day-fest-kicks-off-at-indores-famous-khajrana-temple", "title": "Free Press Journal, 8 Sep 2024", "fact": "Ten-day festival at Khajrana with aarti twice a day and a Ganesh Leela; ends with the Anant Chaturdashi tableaux procession" },
+        { "url": "https://www.freepressjournal.in/indore/ganesh-chaturthi-2026-indores-khajrana-ganesh-temple-adorned-with-7-crore-gold-ornaments-unique-pandals-set-up-across-city", "title": "Free Press Journal, 14 Sep 2026", "fact": "Pandals across the city" }
+      ]
+    },
+    {
+      "slug": "indore-navratri-garba",
+      "name": "Navratri garba, Indore",
+      "recurrence": "every year during the nine nights of Navratri (September or October)",
+      "months": [9, 10],
+      "aliases": ["garba", "dandiya", "navratri"],
+      "description": "During Navratri, Indore dances garba at neighbourhood pandals and at larger ticketed garba nights held in gardens, hotels and event grounds, alongside free community garba. Temples such as Bijasan, Annapurna and Harsiddhi draw large crowds through the festival.",
+      "sources": [
+        { "url": "https://www.freepressjournal.in/indore/navratri-2026-begins-in-indore-with-grand-durga-idol-processions-colourful-garba-and-devotees-thronging-temples", "title": "Free Press Journal, 12 Oct 2026", "fact": "Garba at pandals and along procession routes; crowds at Bijasan, Annapurna, Harsiddhi and Kalika Dham" },
+        { "url": "https://www.freepressjournal.in/indore/indore-this-weekend-from-grand-free-press-garba-to-soothing-sunday-brunch-heres-your-itinerary-for-october-17-18", "title": "Free Press Journal, 16 Oct 2026", "fact": "Ticketed garba nights at gardens, hotels and venues; a free garba event" }
+      ]
+    },
+    {
+      "slug": "indore-ahilya-utsav",
+      "name": "Ahilya Utsav palki yatra, Indore",
+      "recurrence": "every year on Devi Ahilyabai's death anniversary (August or September)",
+      "months": [8, 9],
+      "aliases": ["ahilya utsav", "palki yatra", "ahilya punyatithi", "ahilyabai punyatithi"],
+      "description": "On the death anniversary of Devi Ahilyabai Holkar, the Devi Ahilya Utsav Samiti garlands her statue at Rajwada in the morning and takes out a palki (palanquin) yatra in the evening through the old city, past Krishnapura and Rajwada to Gopal Mandir. The organisers say the yatra has been held for more than a hundred years.",
+      "sources": [
+        { "url": "https://www.freepressjournal.in/indore/madhya-pradesh-ahilyas-palki-yatra-to-be-taken-out-with-full-dignity", "title": "Free Press Journal, 4 Sep 2021", "fact": "Organised by the Devi Ahilya Utsav Samiti; statue garlanded at Rajwada in the morning; palki yatra in the evening through Krishnapura and Rajwada to Gopal Mandir; held for more than a hundred years" },
+        { "url": "https://www.freepressjournal.in/indore/grand-palanquin-procession-taken-out-on-229th-lokmata-devi-ahilyabaideath-anniversary-in-indore-chief-minister-mohan-yadav-participates", "title": "Free Press Journal, 2 Sep 2024", "fact": "Palanquin procession on the death anniversary, past Krishnapura Chhatris and Rajwada to Gopal Mandir" }
+      ]
+    },
+    {
+      "slug": "indore-devi-ahilya-jayanti-parv",
+      "name": "Devi Ahilya Jayanti Parv, Indore",
+      "recurrence": "every year on 30 and 31 May",
+      "months": [5, 6],
+      "aliases": ["ahilya jayanti"],
+      "description": "Devi Ahilya Jayanti Parv is a two-day programme by the state Culture Department marking the birth anniversary of Devi Ahilyabai Holkar, held on 30 and 31 May. It has included a play about her life at Ravindra Natya Grah and an evening of devotional and light music at Rajwada, with free entry.",
+      "sources": [
+        { "url": "https://www.incredibleindia.gov.in/en/festivals-and-events/madhya-pradesh/devi-ahilya-jayanti-parv", "title": "Devi Ahilya Jayanti Parv (Incredible India)", "fact": "Two days, 30 and 31 May, by the Culture Department; a play at Ravindra Natya Grah and devotional and light music at Rajwada; no ticket needed" }
+      ]
+    },
+    {
+      "slug": "indore-malwa-utsav",
+      "name": "Malwa Utsav, Indore",
+      "recurrence": "every year, usually in May",
+      "months": [],
+      "aliases": ["malwa utsav"],
+      "description": "Malwa Utsav is a fair of folk arts, crafts and food organised by Lok Sanskriti Manch at Lalbagh in Indore. Craftspeople from across India sell clay, terracotta, cane, brass and textile work, and folk artists perform tribal and folk dances such as Gond, Korku and Bhagoria.",
+      "sources": [
+        { "url": "https://www.freepressjournal.in/indore/indore-malwa-utsav-to-start-on-may-9-at-lalbagh", "title": "Free Press Journal, 8 May 2023", "fact": "Organised by Lok Sanskriti Manch at Lalbagh; crafts and folk performances" },
+        { "url": "https://www.freepressjournal.in/indore/malwa-utsav-a-blend-of-art-culture-cuisine-over-350-artisans-traditional-performances-and-regional-delicacies-charm-visitors", "title": "Free Press Journal, 10 May 2025", "fact": "Again at Lalbagh in May; crafts from across India, folk dances, regional food" }
+      ]
+    },
+    {
+      "slug": "khajrana-til-chaturthi-fair",
+      "name": "Til Chaturthi fair, Khajrana Ganesh temple",
+      "recurrence": "every year, three days from Til Chaturthi (January)",
+      "months": [1, 2],
+      "aliases": ["til chaturthi"],
+      "description": "Khajrana Ganesh temple in Indore holds a three-day fair from Til Chaturthi, with a different laddoo offered each day, starting with sesame and jaggery. The fair has swings, rides and stalls from traders of several states.",
+      "sources": [
+        { "url": "https://www.freepressjournal.in/indore/indore-news-khajrana-lord-ganesh-to-be-adorned-with-gold-ornaments-worth-7-crore-huge-crowds-expected-at-til-chaturthi-fair", "title": "Free Press Journal, 6 Jan 2026", "fact": "Three-day fair from Til Chaturthi; a different laddoo each day; swings, rides and stalls" },
+        { "url": "https://en.wikipedia.org/wiki/Khajrana_Ganesh_Temple", "title": "Khajrana Ganesh Temple (Wikipedia)", "fact": "Temple in the Khajrana area of Indore" }
+      ]
+    },
+    {
+      "slug": "indore-mahavir-jayanti",
+      "name": "Mahavir Jayanti processions, Indore",
+      "recurrence": "every year on Mahavir Jayanti (March or April)",
+      "months": [3, 4, 5],
+      "aliases": ["mahavir jayanti", "mahavir janma kalyanak"],
+      "description": "On Mahavir Jayanti, Indore's Jain communities take out processions with tableaux, bands and an idol of Mahavir in a palanquin. The Shwetambar procession sets out from Mahavir Bhawan at Rajwada in the morning, and the Digambar community's procession starts and ends at Kanch Mandir.",
+      "sources": [
+        { "url": "https://www.freepressjournal.in/indore/indore-grand-jain-procession-on-mahavir-jayanti-with-message-of-world-peace", "title": "Free Press Journal, 14 Apr 2022", "fact": "Shwetambar morning procession from Mahavir Bhawan at Rajwada; Digambar procession from and to Kanch Mandir; tableaux, bands, palanquin" },
+        { "url": "https://www.freepressjournal.in/bhopal/golden-chariot-parade-winners-announced-mahavir-jayanti-procession-featured-artistic-depictions-tribal-dance-from-various-jain-communities-in-indore", "title": "Free Press Journal, 5 May 2025", "fact": "Golden chariot procession with tableaux by Jain community groups" }
+      ]
+    }
+  ]
+}
