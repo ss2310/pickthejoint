@@ -6,7 +6,7 @@
  */
 import { z } from "zod";
 import type { Pool } from "pg";
-import { ingestion } from "../../config";
+import { ingestion, type SubBudget } from "../../config";
 import type { LlmClient, LlmRequest } from "./llm";
 import { wordCount } from "./text";
 
@@ -67,7 +67,14 @@ export function descriptionEstimate(id: string): LlmRequest<Description> {
 
 export interface WriteReport { written: number; failed: number; modelUsd: number }
 
-export async function writeDescriptions(pool: Pool, llm: LlmClient, opts: { jobName: string; batch?: boolean }): Promise<WriteReport> {
+/**
+ * Without `eventIds`: every scraped event waiting for its text (the ingest job).
+ * With `eventIds`: just those events, whatever their origin (an approved submission).
+ */
+export async function writeDescriptions(
+  pool: Pool, llm: LlmClient, opts: { jobName: string; batch?: boolean; eventIds?: number[]; subBudget?: SubBudget },
+): Promise<WriteReport> {
+  const which = opts.eventIds ? "e.id = ANY($1::bigint[])" : "e.origin = 'scraped' AND e.confidence >= $1";
   const { rows } = await pool.query<PendingEvent>(
     `SELECT e.id, e.title, e.starts_at, e.ends_at, e.start_time_known, e.price_text, e.is_free,
             e.booking_url IS NOT NULL AS has_booking, v.name AS venue, a.name AS area, c.name AS city, c.timezone,
@@ -76,14 +83,13 @@ export async function writeDescriptions(pool: Pool, llm: LlmClient, opts: { jobN
             (SELECT array_agg(o.name) FROM event_organisers eo JOIN organisers o ON o.id = eo.organiser_id WHERE eo.event_id = e.id) AS organisers
      FROM events e JOIN cities c ON c.id = e.city_id
      LEFT JOIN venues v ON v.id = e.venue_id LEFT JOIN areas a ON a.id = v.area_id LEFT JOIN categories cat ON cat.id = e.category_id
-     WHERE e.origin = 'scraped' AND NOT e.is_published AND e.description IS NULL AND e.status = 'scheduled'
-       AND e.confidence >= $1
+     WHERE ${which} AND NOT e.is_published AND e.description IS NULL AND e.status = 'scheduled'
      ORDER BY e.id`,
-    [ingestion.publishConfidence],
+    [opts.eventIds ?? ingestion.publishConfidence],
   );
   const report: WriteReport = { written: 0, failed: 0, modelUsd: 0 };
   if (rows.length === 0) return report;
-  const results = await llm.run(rows.map(request), { jobName: opts.jobName, batch: opts.batch });
+  const results = await llm.run(rows.map(request), { jobName: opts.jobName, batch: opts.batch, subBudget: opts.subBudget });
   for (const r of results) {
     report.modelUsd += r.usd;
     const text = r.data?.description.trim().replace(/\s+/g, " ");

@@ -19,7 +19,7 @@ import {
 
 export interface PostContext {
   rawPostId: number;
-  sourceKind: "instagram" | "google" | "news";
+  sourceKind: "instagram" | "google" | "news" | "submission";
   /** Instagram handle or source key. */
   handle: string;
   handleType?: string;
@@ -90,7 +90,7 @@ async function queueReview(db: Db, ctx: PostContext, reason: string, e: Extracte
   );
 }
 
-async function uniqueSlug(db: Db, table: "venues" | "artists" | "organisers" | "events", base: string, cityId?: number): Promise<string> {
+export async function uniqueSlug(db: Db, table: "venues" | "artists" | "organisers" | "events", base: string, cityId?: number): Promise<string> {
   const root = base || "untitled";
   const scoped = table === "venues" || table === "events";
   const { rows } = await db.query<{ slug: string }>(
@@ -128,7 +128,7 @@ function bestMatch(rows: Named[], name: string, handle: string | null, cityName:
   return best;
 }
 
-async function matchVenue(db: Db, ctx: PostContext, e: ExtractedEvent, create: boolean): Promise<number | null> {
+export async function matchVenue(db: Db, ctx: PostContext, e: ExtractedEvent, create: boolean): Promise<number | null> {
   const name = e.venue_name.value!.trim();
   let handle = cleanHandle(e.venue_instagram_handle);
   // A venue account posting about its own place: the handle is the venue's.
@@ -220,7 +220,7 @@ async function findDuplicate(
   return { kind: "unsure", id: best.id };
 }
 
-function timing(e: ExtractedEvent, timeZone: string) {
+export function timing(e: ExtractedEvent, timeZone: string) {
   const date = e.start_date.value!;
   const timeKnown = e.start_time.value !== null && e.start_time.confidence >= 0.6 && isClockTime(e.start_time.value);
   const startsAt = zonedToUtc(date, timeKnown ? e.start_time.value! : "00:00", timeZone);
@@ -242,7 +242,7 @@ function timing(e: ExtractedEvent, timeZone: string) {
 const optional = <T>(f: { value: T | null; confidence: number }) => (f.value !== null && f.value !== "" && f.confidence >= 0.6 ? f.value : null);
 const httpUrl = (u: string | null) => (u && /^https?:\/\/\S+\.\S+/i.test(u) ? u : null);
 
-async function attachPeople(db: Db, eventId: number, e: ExtractedEvent) {
+export async function attachPeople(db: Db, eventId: number, e: ExtractedEvent) {
   let order = 0;
   for (const p of e.performers) {
     if (!p.name.trim() || p.confidence < 0.7) continue;
@@ -266,7 +266,7 @@ async function addSource(db: Db, eventId: number, ctx: PostContext) {
   );
 }
 
-async function categoryId(db: Db, e: ExtractedEvent): Promise<number | null> {
+export async function categoryId(db: Db, e: ExtractedEvent): Promise<number | null> {
   const slug = optional(e.category);
   if (!slug) return null;
   return (await db.query<{ id: number }>("SELECT id FROM categories WHERE slug = $1", [slug])).rows[0]?.id ?? null;

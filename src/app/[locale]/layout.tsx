@@ -38,6 +38,7 @@ export default async function RootLayout({ children, params }: Readonly<{ childr
             <nav aria-label={m.navLabel}>
               <PlainLink href="/about">{m.navAbout}</PlainLink>
               <PlainLink href="/how-we-verify">{m.navVerify}</PlainLink>
+              <Link href="/submit">{messages(locale).submit.nav}</Link>
             </nav>
           </div>
         </header>
@@ -51,6 +52,7 @@ export default async function RootLayout({ children, params }: Readonly<{ childr
               <PlainLink href="/how-we-verify">{m.footerVerify}</PlainLink>
               <PlainLink href="/corrections">{m.footerCorrections}</PlainLink>
               <PlainLink href="/changelog">{m.footerChangelog}</PlainLink>
+              <Link href="/submit">{messages(locale).submit.nav}</Link>
             </nav>
           </div>
         </footer>

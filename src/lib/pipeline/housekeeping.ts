@@ -5,7 +5,27 @@
  *   - reports the last day's activity and the month's spend.
  */
 import type { Pool } from "pg";
+import { submissions } from "../../config";
 import { mergeDuplicates } from "./dedupe";
+
+/**
+ * Deletes what is only kept for a while (Prompt 6): poster photos once their
+ * time is up (the day after the event, or sooner when unused), drafts that
+ * were never sent (with their photo), rate-limit records and expired admin
+ * sessions.
+ */
+export async function cleanUp(pool: Pool, now = new Date()) {
+  const drafts = await pool.query<{ poster_id: number | null }>(
+    "DELETE FROM submissions WHERE status = 'draft' AND updated_at < $1::timestamptz - make_interval(days => $2) RETURNING poster_id",
+    [now, submissions.draftDays]);
+  const orphanPosters = drafts.rows.map((d) => d.poster_id).filter((id): id is number => id !== null);
+  const posters = await pool.query(
+    `DELETE FROM poster_images WHERE delete_after < $1 OR (id = ANY($2::bigint[]) AND NOT EXISTS (SELECT 1 FROM submissions s WHERE s.poster_id = poster_images.id))`,
+    [now, orphanPosters]);
+  const hits = await pool.query("DELETE FROM rate_hits WHERE hit_at < $1::timestamptz - interval '2 days'", [now]);
+  const sessions = await pool.query("DELETE FROM admin_sessions WHERE expires_at < $1", [now]);
+  return { posterPhotosDeleted: posters.rowCount ?? 0, unsentDraftsDeleted: drafts.rowCount ?? 0, rateRecordsDeleted: hits.rowCount ?? 0, expiredSessions: sessions.rowCount ?? 0 };
+}
 
 export async function housekeeping(pool: Pool, opts: { dryRun?: boolean; now?: Date } = {}) {
   const now = opts.now ?? new Date();
@@ -19,9 +39,11 @@ export async function housekeeping(pool: Pool, opts: { dryRun?: boolean; now?: D
 
   const one = async (sql: string) => Number((await pool.query<{ n: number }>(sql, [now])).rows[0].n);
   const since = "$1::timestamptz - interval '24 hours'";
+  const cleanup = opts.dryRun ? { skipped: "dry run" } : await cleanUp(pool, now);
   return {
     duplicates,
     eventsMarkedHappened: marked,
+    cleanup,
     last24Hours: {
       postsFetched: await one(`SELECT count(*) AS n FROM raw_posts WHERE fetched_at >= ${since}`),
       eventsPublished: await one(`SELECT count(*) AS n FROM events WHERE is_published AND created_at >= ${since}`),

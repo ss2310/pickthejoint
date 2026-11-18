@@ -44,7 +44,7 @@ export type ExtractedEvent = Extraction["events"][number];
 
 export interface ExtractionInput {
   id: string;
-  sourceKind: "instagram" | "google" | "news";
+  sourceKind: "instagram" | "google" | "news" | "poster";
   /** Instagram handle, or the name of the web source. */
   sourceName: string;
   sourceType?: string;
@@ -61,7 +61,9 @@ export interface ExtractionInput {
 
 const SYSTEM = `You extract event facts for a city events guide in India. The facts you return are published as-is, so a wrong fact is worse than a missing one.
 
-You are given a post or listing (an Instagram caption with its poster image, a search result, or a news roundup), the city it belongs to, and the date it was published.
+You are given a post or listing (an Instagram caption with its poster image, a search result, a news roundup, or a photo of a poster that someone sent us), the city it belongs to, and the date it was published.
+
+A photo of a poster may be a street poster, a notice board, a flyer or an image forwarded on WhatsApp, taken at an angle, blurred or partly covered. Read only what is legible: a word you cannot make out is null, not a guess. If the photo is not of an event poster at all, return is_event_post false. For a poster photo with no city written on it, the city given to you is where the sender says it is; use it unless the poster names another place.
 
 What to return
 - is_event_post: true only if it announces at least one specific event the public can attend, or announces that one is cancelled, postponed or changed. A recap of something that already happened, a menu, an offer with no event, or a generic promotion is not an event post: return an empty events list.
@@ -97,7 +99,9 @@ export function extractionRequest(input: ExtractionInput): LlmRequest<Extraction
       ? `Instagram account @${input.sourceName}${input.sourceType ? ` (listed as: ${input.sourceType})` : ""}`
       : input.sourceKind === "google"
         ? `Google event result for ${input.cityName}`
-        : `Local news page: ${input.sourceName}`;
+        : input.sourceKind === "poster"
+          ? `Photo of a poster sent to us (${input.sourceName}); "published" is the day it was sent`
+          : `Local news page: ${input.sourceName}`;
   const parts = [
     `City: ${input.cityName}`,
     `Source: ${source}`,
@@ -105,7 +109,7 @@ export function extractionRequest(input: ExtractionInput): LlmRequest<Extraction
     `Known areas in ${input.cityName}: ${input.areas.join(", ")}`,
     `Allowed categories: ${input.categorySlugs.join(", ")}`,
     "",
-    input.sourceKind === "instagram" ? "Caption:" : "Text:",
+    input.sourceKind === "instagram" ? "Caption:" : input.sourceKind === "poster" ? "Note from the sender (may be empty; facts on the poster come first):" : "Text:",
     input.text.trim() || "(empty)",
   ];
   if (input.transcript?.trim()) {
