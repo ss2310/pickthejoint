@@ -261,7 +261,7 @@ Rules:
 - "identity": follow the notes' own IDENTITY line. "confirmed" if the notes establish which ${NOUN[type]} this is; "uncertain" only if the notes doubt which ${NOUN[type]} of this name it is; "not_found" if nothing reliable was found. When it is not "confirmed", return empty lists. Doubt about one detail is not doubt about identity: when sources disagree on a fact, give the better-supported version with a low confidence, or leave that fact out.
 - Each fact has a "field", a "value", its "sources" and your "confidence" from 0 to 1 that the fact is true of this ${NOUN[type]}.
   Fields and what goes in the value: ${FIELD_GUIDE[type]}.
-- Write each value in plain words of your own. No sentences copied from a source, no praise, no marketing language.
+- Write each value in plain words of your own. No sentences copied from a source, no praise, no marketing language. State the fact directly: do not say where it comes from ("according to its Instagram bio") in the value, since the sources are listed separately, and do not hedge ("a place called"). If you are not sure enough to state it plainly, lower the confidence instead.
 - "sources": the pages the notes give for that fact. Copy each address exactly from the list of returned pages; leave out any address that is not on that list. "kind" is "official" for their own website or profile, "reputable" for established news outlets, ticketing platforms, government or institutional sites and official platform pages, and "weak" for business listing sites, forums, social posts by others, blogs and pages anyone can edit.
 - Lower your confidence when sources disagree, when the only support is weak, or when the notes hedge.
 - Leave out anything that will soon be out of date or is a matter of opinion: dates of individual shows, ticket prices, follower and stream counts, ratings, reviews and promotional claims.${type === "venue" ? "" : `
@@ -293,7 +293,8 @@ Write ${enrichment.text.minWords} to ${enrichment.text.maxWords} words of plain,
 - Say only what is known. Never mention that something is unknown, unavailable or not stated.
 - Neutral tone: no praise, no hype, no exclamation marks, no second-person address, no calls to action.
 - Use your own wording throughout.${t.type === "venue" ? "\n- Do not repeat the full street address; the page shows it separately. You may name the area and city." : "\n- Professional, public facts only."}
-- If the facts are too few to reach the length honestly, write fewer words rather than padding.`;
+- State each fact once and plainly. Do not say where a fact comes from, do not restate the same fact in other words, and do not draw conclusions from the facts (what a location "means", what a venue "combines").
+- If the facts are too few to reach the length honestly, write fewer words rather than padding. Two plain sentences are better than five that repeat themselves.`;
   const lines = [
     `Name: ${t.name}`, ...(t.type === "venue" && t.city ? [`City: ${t.city}`] : []),
     ...facts.filter((f) => !(t.type === "venue" && f.field === "address")).map((f) => `${FIELDS[t.type][f.field].label}: ${f.value}`),
@@ -339,6 +340,15 @@ export const isPrivate = (text: string) => PRIVATE.test(text);
 
 const suffixMatch = (host: string, domain: string) => host === domain || host.endsWith(`.${domain}`);
 const isWeakHost = (host: string) => enrichment.weakDomains.some((d) => suffixMatch(host, d));
+/**
+ * The site behind a host, so that one site under two addresses is not counted
+ * as two independent sources: tripadvisor.in and tripadvisor.com are both "tripadvisor".
+ */
+export function siteOf(host: string): string {
+  const labels = host.split(".");
+  const tldParts = labels.length >= 3 && /^(co|com|org|net|gov|ac|edu)$/.test(labels[labels.length - 2]) ? 2 : 1;
+  return labels[labels.length - tldParts - 1] ?? host;
+}
 
 const LINK_HOSTS: Record<string, string[]> = {
   instagram: ["instagram.com"], youtube: ["youtube.com", "youtu.be"], spotify: ["spotify.com"], apple_music: ["music.apple.com"],
@@ -380,7 +390,7 @@ export function assess(type: EntityType, s: Structured, pages: RetrievedPage[], 
   };
   /** Hard rule: one weak source is not enough; two weak sources on different sites are. */
   const enough = (sources: CheckedSource[]) =>
-    sources.some((x) => x.strength !== "weak") || new Set(sources.map((x) => hostOf(x.url))).size >= 2;
+    sources.some((x) => x.strength !== "weak") || new Set(sources.map((x) => siteOf(hostOf(x.url)))).size >= 2;
 
   const single = new Map<string, AcceptedFact>();
   const seenValues = new Set<string>();
