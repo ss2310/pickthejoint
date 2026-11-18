@@ -13,7 +13,7 @@ export default async function About() {
     <Editorial title="About Pick the Joint" path="/about">
       <p className="lead">
         Pick the Joint is an independent guide to what is on in Indian cities: concerts, comedy, theatre, workshops, college and
-        community events, festivals and more. It does not sell tickets and it does not take payment for listings.
+        community events, festivals and more. It does not sell tickets, and it does not currently take payment for listings.
       </p>
       <h2>What you will find here</h2>
       <ul>
