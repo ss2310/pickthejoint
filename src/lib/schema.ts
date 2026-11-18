@@ -9,6 +9,7 @@
  */
 import { site } from "../config";
 import { isoDay, isoWithOffset } from "./format";
+import { LANG_TAG, getLocale, localePath } from "./locale";
 import type { EventCard, EventDetail, PersonDetail, SeriesDetail, VenueDetail } from "./queries";
 
 export type Ld = Record<string, unknown>;
@@ -169,7 +170,7 @@ export function breadcrumbLd(trail: { name: string; path: string }[]): Ld {
   return {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
-    itemListElement: trail.map((t, i) => ({ "@type": "ListItem", position: i + 1, name: t.name, item: abs(t.path) })),
+    itemListElement: trail.map((t, i) => ({ "@type": "ListItem", position: i + 1, name: t.name, item: abs(localePath(t.path)) })),
   };
 }
 
@@ -179,7 +180,7 @@ export function itemListLd(name: string, events: EventCard[]): Ld {
     "@type": "ItemList",
     name,
     numberOfItems: events.length,
-    itemListElement: events.map((e, i) => ({ "@type": "ListItem", position: i + 1, name: e.title, url: abs(eventPath(e)) })),
+    itemListElement: events.map((e, i) => ({ "@type": "ListItem", position: i + 1, name: e.title, url: abs(localePath(eventPath(e))) })),
   };
 }
 
@@ -197,12 +198,14 @@ export function faqLd(faqs: { question: string; answer: string }[]): Ld {
  * as "Updated".
  */
 export function pageLd(path: string, name: string, modified: Date | null, aboutId?: string): Ld {
+  // The page has its own address in each language; the thing it is about (aboutId) is the same in both.
+  const url = abs(localePath(path));
   return clean({
-    "@context": "https://schema.org", "@type": "WebPage", "@id": abs(path), url: abs(path), name,
+    "@context": "https://schema.org", "@type": "WebPage", "@id": url, url, name,
     isPartOf: { "@id": ids.website }, publisher: { "@id": ids.organization },
     mainEntity: aboutId ? { "@id": aboutId } : undefined,
     dateModified: modified ? modified.toISOString() : undefined,
-    inLanguage: "en-IN",
+    inLanguage: LANG_TAG[getLocale()],
   });
 }
 

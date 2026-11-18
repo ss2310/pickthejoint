@@ -2,7 +2,24 @@
  * Read queries for the public pages. Only published events are ever returned.
  * Dates are compared in the city's timezone.
  */
+import type { Locale } from "../config";
 import { getPool } from "./db";
+import { getLocale } from "./locale";
+
+/**
+ * A text column in the page's language. English is the stored text. For
+ * another language the translations table is consulted and the stored text is
+ * the fallback, so a missing translation never blocks a page. A translation is
+ * used only while it matches the stored text (by its hash): if the English has
+ * changed or been removed since, the page shows the current English until the
+ * next translation run. `locale` comes from a fixed list, never from a request.
+ */
+function tr(locale: Locale, type: string, id: string, field: string, column: string): string {
+  if (locale === "en") return column;
+  return `(CASE WHEN ${column} IS NULL THEN NULL ELSE coalesce((SELECT tx.text FROM translations tx
+    WHERE tx.entity_type = '${type}' AND tx.entity_id = ${id} AND tx.locale = '${locale}' AND tx.field = '${field}'
+      AND tx.source_hash = md5(${column})), ${column}) END)`;
+}
 
 export interface City { id: number; slug: string; name: string; state: string; timezone: string }
 export interface Named { id: number; slug: string; name: string }
@@ -41,11 +58,13 @@ export interface EventFilter {
   limit?: number;
 }
 
-const CARD = `
-  e.id, e.city_id, e.slug, e.title, e.starts_at, e.ends_at, e.start_time_known, e.status, e.price_text, e.is_free, e.updated_at,
-  c.slug AS city_slug, c.timezone, v.name AS venue_name, v.slug AS venue_slug, a.name AS area_name,
-  cat.slug AS category_slug, cat.name AS category_name,
-  coalesce((SELECT array_agg(ar.name ORDER BY ea.billing_order) FROM event_artists ea JOIN artists ar ON ar.id = ea.artist_id
+const card = (l: Locale) => `
+  e.id, e.city_id, e.slug, ${tr(l, "event", "e.id", "title", "e.title")} AS title, e.starts_at, e.ends_at, e.start_time_known, e.status,
+  ${tr(l, "event", "e.id", "price_text", "e.price_text")} AS price_text, e.is_free, e.updated_at,
+  c.slug AS city_slug, c.timezone, ${tr(l, "venue", "v.id", "name", "v.name")} AS venue_name, v.slug AS venue_slug,
+  ${tr(l, "area", "a.id", "name", "a.name")} AS area_name,
+  cat.slug AS category_slug, ${tr(l, "category", "cat.id", "name", "cat.name")} AS category_name,
+  coalesce((SELECT array_agg(${tr(l, "artist", "ar.id", "name", "ar.name")} ORDER BY ea.billing_order) FROM event_artists ea JOIN artists ar ON ar.id = ea.artist_id
             WHERE ea.event_id = e.id), '{}') AS performers`;
 const JOINS = `
   FROM events e JOIN cities c ON c.id = e.city_id
@@ -58,7 +77,7 @@ const START_DAY = `(e.starts_at AT TIME ZONE c.timezone)::date`;
 const END_DAY = `(CASE WHEN e.ends_at IS NOT NULL AND e.ends_at - e.starts_at > interval '20 hours'
                   THEN (e.ends_at AT TIME ZONE c.timezone)::date ELSE ${START_DAY} END)`;
 
-export async function listEvents(f: EventFilter): Promise<EventCard[]> {
+export async function listEvents(f: EventFilter, locale: Locale = getLocale()): Promise<EventCard[]> {
   const where = ["e.is_published", "c.is_live"];
   const args: unknown[] = [];
   const add = (sql: string, value: unknown) => { args.push(value); where.push(sql.replace("?", `$${args.length}`)); };
@@ -79,35 +98,40 @@ export async function listEvents(f: EventFilter): Promise<EventCard[]> {
   if (when === "past") where.push(OVER);
   args.push(f.limit ?? 200);
   const { rows } = await getPool().query<EventCard>(
-    `SELECT ${CARD} ${JOINS} WHERE ${where.join(" AND ")}
+    `SELECT ${card(locale)} ${JOINS} WHERE ${where.join(" AND ")}
      ORDER BY e.starts_at ${when === "past" ? "DESC" : "ASC"}, e.id LIMIT $${args.length}`,
     args,
   );
   return rows;
 }
 
-export async function getCity(slug: string): Promise<City | null> {
+const cityColumns = (l: Locale) =>
+  `c.id, c.slug, ${tr(l, "city", "c.id", "name", "c.name")} AS name, ${tr(l, "city", "c.id", "state", "c.state")} AS state, c.timezone`;
+
+export async function getCity(slug: string, locale: Locale = getLocale()): Promise<City | null> {
   const { rows } = await getPool().query<City>(
-    "SELECT id, slug, name, state, timezone FROM cities WHERE slug = $1 AND is_live", [slug.toLowerCase()]);
+    `SELECT ${cityColumns(locale)} FROM cities c WHERE c.slug = $1 AND c.is_live`, [slug.toLowerCase()]);
   return rows[0] ?? null;
 }
 
-export async function liveCities(): Promise<City[]> {
-  return (await getPool().query<City>("SELECT id, slug, name, state, timezone FROM cities WHERE is_live ORDER BY name")).rows;
+export async function liveCities(locale: Locale = getLocale()): Promise<City[]> {
+  return (await getPool().query<City>(`SELECT ${cityColumns(locale)} FROM cities c WHERE c.is_live ORDER BY c.name`)).rows;
 }
 
-export async function listCategories(): Promise<Named[]> {
-  return (await getPool().query<Named>("SELECT id, slug, name FROM categories ORDER BY sort_order")).rows;
+export async function listCategories(locale: Locale = getLocale()): Promise<Named[]> {
+  return (await getPool().query<Named>(
+    `SELECT cat.id, cat.slug, ${tr(locale, "category", "cat.id", "name", "cat.name")} AS name FROM categories cat ORDER BY cat.sort_order`)).rows;
 }
 
-export async function listAreas(cityId: number): Promise<Area[]> {
-  return (await getPool().query<Area>("SELECT id, slug, name, city_id FROM areas WHERE city_id = $1 ORDER BY name", [cityId])).rows;
+export async function listAreas(cityId: number, locale: Locale = getLocale()): Promise<Area[]> {
+  return (await getPool().query<Area>(
+    `SELECT a.id, a.slug, ${tr(locale, "area", "a.id", "name", "a.name")} AS name, a.city_id FROM areas a WHERE a.city_id = $1 ORDER BY a.name`, [cityId])).rows;
 }
 
 /** Areas that have at least one upcoming published event. */
-export async function areasWithEvents(cityId: number): Promise<Area[]> {
+export async function areasWithEvents(cityId: number, locale: Locale = getLocale()): Promise<Area[]> {
   const { rows } = await getPool().query<Area>(
-    `SELECT a.id, a.slug, a.name, a.city_id FROM areas a
+    `SELECT a.id, a.slug, ${tr(locale, "area", "a.id", "name", "a.name")} AS name, a.city_id FROM areas a
      WHERE a.city_id = $1 AND EXISTS (
        SELECT 1 FROM events e JOIN venues v ON v.id = e.venue_id JOIN cities c ON c.id = e.city_id
        WHERE v.area_id = a.id AND e.is_published AND NOT ${OVER})
@@ -115,15 +139,17 @@ export async function areasWithEvents(cityId: number): Promise<Area[]> {
   return rows;
 }
 
-export async function getEvent(citySlug: string, slug: string): Promise<EventDetail | null> {
+export async function getEvent(citySlug: string, slug: string, locale: Locale = getLocale()): Promise<EventDetail | null> {
+  const l = locale;
   const { rows } = await getPool().query<EventDetail>(
-    `SELECT ${CARD}, e.description, e.booking_url, e.last_verified_at, e.origin, c.name AS city_name, c.state AS city_state,
-            v.id AS venue_id, v.address AS venue_address, v.lat AS venue_lat, v.lng AS venue_lng, a.slug AS area_slug,
+    `SELECT ${card(l)}, ${tr(l, "event", "e.id", "description", "e.description")} AS description, e.booking_url, e.last_verified_at, e.origin,
+            ${tr(l, "city", "c.id", "name", "c.name")} AS city_name, ${tr(l, "city", "c.id", "state", "c.state")} AS city_state,
+            v.id AS venue_id, ${tr(l, "venue", "v.id", "address", "v.address")} AS venue_address, v.lat AS venue_lat, v.lng AS venue_lng, a.slug AS area_slug,
             e.category_id,
-            (SELECT json_build_object('id', s.id, 'slug', s.slug, 'name', s.name) FROM series s WHERE s.id = e.series_id) AS series,
-            coalesce((SELECT json_agg(json_build_object('slug', ar.slug, 'name', ar.name, 'kind', ar.kind) ORDER BY ea.billing_order)
+            (SELECT json_build_object('id', s.id, 'slug', s.slug, 'name', ${tr(l, "series", "s.id", "name", "s.name")}) FROM series s WHERE s.id = e.series_id) AS series,
+            coalesce((SELECT json_agg(json_build_object('slug', ar.slug, 'name', ${tr(l, "artist", "ar.id", "name", "ar.name")}, 'kind', ar.kind) ORDER BY ea.billing_order)
                       FROM event_artists ea JOIN artists ar ON ar.id = ea.artist_id WHERE ea.event_id = e.id), '[]') AS artists,
-            coalesce((SELECT json_agg(json_build_object('slug', o.slug, 'name', o.name) ORDER BY o.name)
+            coalesce((SELECT json_agg(json_build_object('slug', o.slug, 'name', ${tr(l, "organiser", "o.id", "name", "o.name")}) ORDER BY o.name)
                       FROM event_organisers eo JOIN organisers o ON o.id = eo.organiser_id WHERE eo.event_id = e.id), '[]') AS organisers,
             coalesce((SELECT json_agg(json_build_object('source_type', s.source_type, 'url', s.url) ORDER BY s.id)
                       FROM sources s WHERE s.event_id = e.id), '[]') AS sources
@@ -150,11 +176,14 @@ const entitySources = (type: "venue" | "artist" | "organiser", idColumn: string)
                          coalesce(array_agg(DISTINCT es.fact) FILTER (WHERE es.fact IS NOT NULL), '{}') AS facts
                   FROM entity_sources es WHERE es.entity_type = '${type}' AND es.entity_id = ${idColumn} GROUP BY es.url) s), '[]') AS sources`;
 
-export async function getVenue(citySlug: string, slug: string): Promise<VenueDetail | null> {
+export async function getVenue(citySlug: string, slug: string, locale: Locale = getLocale()): Promise<VenueDetail | null> {
+  const l = locale;
+  const vt = (field: string) => `${tr(l, "venue", "v.id", field, `v.${field}`)} AS ${field}`;
   const { rows } = await getPool().query<VenueDetail>(
-    `SELECT v.id, v.slug, v.name, v.city_id, c.slug AS city_slug, c.name AS city_name, c.state AS city_state, c.timezone,
-            v.venue_type, v.address, v.lat, v.lng, v.capacity, v.parking, v.how_to_reach, v.landmarks, v.description, v.official_links,
-            v.same_as, a.name AS area_name, a.slug AS area_slug, v.updated_at, ${entitySources("venue", "v.id")}
+    `SELECT v.id, v.slug, ${vt("name")}, v.city_id, c.slug AS city_slug, ${tr(l, "city", "c.id", "name", "c.name")} AS city_name,
+            ${tr(l, "city", "c.id", "state", "c.state")} AS city_state, c.timezone,
+            ${vt("venue_type")}, ${vt("address")}, v.lat, v.lng, v.capacity, ${vt("parking")}, ${vt("how_to_reach")}, ${vt("landmarks")}, ${vt("description")}, v.official_links,
+            v.same_as, ${tr(l, "area", "a.id", "name", "a.name")} AS area_name, a.slug AS area_slug, v.updated_at, ${entitySources("venue", "v.id")}
      FROM venues v JOIN cities c ON c.id = v.city_id LEFT JOIN areas a ON a.id = v.area_id
      WHERE c.slug = $1 AND v.slug = $2 AND c.is_live
        AND EXISTS (SELECT 1 FROM events e WHERE e.venue_id = v.id AND e.is_published)`,
@@ -171,24 +200,26 @@ export interface PersonDetail extends Named {
   sources: EntitySource[];
 }
 
-async function getPerson(table: "artists" | "organisers", join: "event_artists" | "event_organisers", fk: string, slug: string) {
-  const extra = table === "artists" ? "p.kind, p.genre, p.hometown, p.notable_works," : "";
+async function getPerson(table: "artists" | "organisers", join: "event_artists" | "event_organisers", fk: string, slug: string, locale: Locale) {
   const type = table === "artists" ? "artist" : "organiser";
+  const pt = (field: string) => `${tr(locale, type, "p.id", field, `p.${field}`)} AS ${field}`;
+  const extra = table === "artists" ? `p.kind, ${pt("genre")}, ${pt("hometown")}, p.notable_works,` : "";
   const { rows } = await getPool().query<PersonDetail>(
-    `SELECT p.id, p.slug, p.name, ${extra} p.bio, p.official_links, p.same_as, p.updated_at, ${entitySources(type, "p.id")}
+    `SELECT p.id, p.slug, ${pt("name")}, ${extra} ${pt("bio")}, p.official_links, p.same_as, p.updated_at, ${entitySources(type, "p.id")}
      FROM ${table} p
      WHERE p.slug = $1 AND EXISTS (SELECT 1 FROM ${join} j JOIN events e ON e.id = j.event_id WHERE j.${fk} = p.id AND e.is_published)`,
     [slug],
   );
   return rows[0] ?? null;
 }
-export const getArtist = (slug: string) => getPerson("artists", "event_artists", "artist_id", slug);
-export const getOrganiser = (slug: string) => getPerson("organisers", "event_organisers", "organiser_id", slug);
+export const getArtist = (slug: string, locale: Locale = getLocale()) => getPerson("artists", "event_artists", "artist_id", slug, locale);
+export const getOrganiser = (slug: string, locale: Locale = getLocale()) => getPerson("organisers", "event_organisers", "organiser_id", slug, locale);
 
 export interface SeriesDetail extends Named { description: string | null; recurrence: string | null; official_links: Record<string, string>; updated_at: Date }
-export async function getSeries(slug: string): Promise<SeriesDetail | null> {
+export async function getSeries(slug: string, locale: Locale = getLocale()): Promise<SeriesDetail | null> {
+  const st = (field: string) => `${tr(locale, "series", "s.id", field, `s.${field}`)} AS ${field}`;
   const { rows } = await getPool().query<SeriesDetail>(
-    "SELECT id, slug, name, description, recurrence, official_links, updated_at FROM series WHERE slug = $1", [slug]);
+    `SELECT s.id, s.slug, ${st("name")}, ${st("description")}, ${st("recurrence")}, s.official_links, s.updated_at FROM series s WHERE s.slug = $1`, [slug]);
   return rows[0] ?? null;
 }
 

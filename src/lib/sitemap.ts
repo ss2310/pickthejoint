@@ -1,21 +1,38 @@
 /** XML sitemaps, split by page type, with last-modified dates taken from the data. */
-import { site } from "../config";
+import { locales, site } from "../config";
 import { changelog } from "../content/changelog";
 import { DATE_HUBS } from "./hubs";
 import { isoDay } from "./format";
+import { LANG_TAG, localePath } from "./locale";
 import { zonedToUtc } from "./pipeline/text";
 import { areasWithEvents, cityLastChange, listCategories, listEvents, liveCities, sitemapRows } from "./queries";
 
 export const SITEMAP_TYPES = ["hubs", "events", "venues", "artists", "organisers", "series", "pages"] as const;
 export type SitemapType = (typeof SITEMAP_TYPES)[number];
 
-export interface SitemapEntry { path: string; lastmod: Date }
+export interface SitemapEntry {
+  path: string; lastmod: Date;
+  /** Set on pages that exist in English only. */
+  oneLanguage?: boolean;
+}
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+/**
+ * One <url> per language version of a page. Each lists every version of that
+ * page (hreflang), which is how search engines learn the two belong together.
+ */
 export function urlsetXml(entries: SitemapEntry[]): string {
-  const urls = entries.map((e) => `<url><loc>${esc(site.url + e.path)}</loc><lastmod>${e.lastmod.toISOString()}</lastmod></url>`);
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join("\n")}\n</urlset>\n`;
+  const urls = entries.flatMap((e) => {
+    const lastmod = `<lastmod>${e.lastmod.toISOString()}</lastmod>`;
+    if (e.oneLanguage) return [`<url><loc>${esc(site.url + e.path)}</loc>${lastmod}</url>`];
+    const links = [
+      ...locales.map((l) => `<xhtml:link rel="alternate" hreflang="${LANG_TAG[l]}" href="${esc(site.url + localePath(e.path, l))}"/>`),
+      `<xhtml:link rel="alternate" hreflang="x-default" href="${esc(site.url + e.path)}"/>`,
+    ].join("");
+    return locales.map((l) => `<url><loc>${esc(site.url + localePath(e.path, l))}</loc>${lastmod}${links}</url>`);
+  });
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${urls.join("\n")}\n</urlset>\n`;
 }
 
 export function indexXml(entries: SitemapEntry[]): string {
@@ -47,7 +64,7 @@ async function hubEntries(now: Date): Promise<SitemapEntry[]> {
 
 function pageEntries(): SitemapEntry[] {
   const latest = new Date(`${changelog[0]?.date ?? "2026-11-18"}T00:00:00Z`);
-  return ["/about", "/how-we-verify", "/corrections", "/changelog"].map((path) => ({ path, lastmod: latest }));
+  return ["/about", "/how-we-verify", "/corrections", "/changelog"].map((path) => ({ path, lastmod: latest, oneLanguage: true }));
 }
 
 export async function sitemapEntries(type: SitemapType, now = new Date()): Promise<SitemapEntry[]> {

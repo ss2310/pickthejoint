@@ -18,7 +18,8 @@ import { pingIndexNow } from "../../src/lib/indexnow";
 import { scrapeInstagram, type ScrapeReport } from "../../src/lib/pipeline/scrape";
 import { fetchGoogleEvents, fetchNewsCalendars } from "../../src/lib/pipeline/sources";
 import { processPosts } from "../../src/lib/pipeline/process";
-import { ingestion } from "../../src/config";
+import { ingestion, translation } from "../../src/config";
+import { translatePending } from "../../src/lib/pipeline/translate";
 
 main("ingest", async (pool, report, args) => {
   const llm = new AnthropicLlm();
@@ -40,6 +41,16 @@ main("ingest", async (pool, report, args) => {
   const pipeline = await processPosts(pool, { llm, apify }, { jobName, dryRun: args.dryRun, batch: args.batch, expectedNewPosts });
   report.pipeline = pipeline;
   if (args.dryRun) return;
+
+  // New or changed text gets its Hindi now, so it is never translated on page load.
+  if (translation.enabled) {
+    try {
+      report.translation = await translatePending(pool, llm, { jobName: jobName, batch: args.batch });
+    } catch (err) {
+      // A translation problem must not fail the job: Hindi pages fall back to English until the next run.
+      report.translation = { error: (err as Error).message.slice(0, 300) };
+    }
+  }
 
   report.indexNow = await pingIndexNow(pool);
 

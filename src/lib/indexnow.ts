@@ -7,7 +7,8 @@
  * announced too, so its change is picked up as quickly as a new one.
  */
 import type { Pool } from "pg";
-import { indexNow, site } from "../config";
+import { indexNow, locales, site } from "../config";
+import { localePath } from "./locale";
 import { DATE_HUBS } from "./hubs";
 
 export interface IndexNowReport { urls: number; status: string; sample?: string[] }
@@ -56,7 +57,8 @@ export async function changedPaths(pool: Pool, since: Date | null): Promise<stri
          AND EXISTS (SELECT 1 FROM event_organisers j JOIN events e ON e.id = j.event_id WHERE j.organiser_id = p.id AND e.is_published)`, [since]);
     for (const r of enriched.rows) paths.add(r.path);
   }
-  return [...paths];
+  // Every one of these pages exists in each language.
+  return [...paths].flatMap((p) => locales.map((l) => localePath(p, l)));
 }
 
 export async function pingIndexNow(pool: Pool, opts: { dryRun?: boolean; fetchFn?: typeof fetch; force?: boolean } = {}): Promise<IndexNowReport> {
