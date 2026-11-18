@@ -32,6 +32,15 @@ async function cityOf(form: FormData) {
   return (await liveCities()).find((c) => c.slug === slug) ?? null;
 }
 
+/** Turnstile, with Cloudflare's reason written to the log when it refuses (the visitor only sees "try again"). */
+async function checkHuman(form: FormData, ip: string, where: "poster" | "form"): Promise<boolean> {
+  const token = form.get("cf-turnstile-response");
+  const tokens = form.getAll("cf-turnstile-response").length;
+  const result = await verifyTurnstile(typeof token === "string" ? token : null, ip);
+  if (!result.ok) console.warn(`[turnstile] ${where} refused: ${result.reason} (tokens in form: ${tokens}, token length: ${typeof token === "string" ? token.length : 0})`);
+  return result.ok;
+}
+
 export async function snapPoster(form: FormData): Promise<void> {
   const locale = localeOf(form);
   const back = (query: string): never => redirect(localePath(`/submit?${query}`, locale));
@@ -42,7 +51,7 @@ export async function snapPoster(form: FormData): Promise<void> {
   if (!(file instanceof File) || file.size === 0) back("upload=empty");
   const upload = file as File;
   if (upload.size > cfg.maxUploadBytes) back("upload=tooBig");
-  if (!(await verifyTurnstile(form.get("cf-turnstile-response") as string | null, ip)).ok) back("upload=captcha");
+  if (!(await checkHuman(form, ip, "poster"))) back("upload=captcha");
   if (!(await rateAllow(`poster:${who}`, [cfg.limits.poster]))) back("upload=tooMany");
 
   let image: CleanImage | null = null;
@@ -118,7 +127,7 @@ export async function sendEvent(form: FormData): Promise<void> {
   const errors = validate(fields, submitter, cats, localDate(new Date(), city?.timezone ?? "Asia/Kolkata"));
   if (!city) errors.city = "required";
   if (Object.keys(errors).length) await back(errors);
-  if (!(await verifyTurnstile(form.get("cf-turnstile-response") as string | null, ip)).ok) await back({ _form: "captcha" });
+  if (!(await checkHuman(form, ip, "form"))) await back({ _form: "captcha" });
   if (!(await rateAllow(`form:${who}`, [cfg.limits.form, cfg.limits.formDaily]))) await back({ _form: "tooMany" });
 
   await saveDraft(draft.id, { cityId: city!.id, fields, submitter, errors: null });
