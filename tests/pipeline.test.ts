@@ -17,7 +17,8 @@ import type { LlmClient, LlmRequest, LlmResult, LlmRunOptions } from "../src/lib
 import { processPosts } from "../src/lib/pipeline/process";
 import { buildActorInput, normalisePost, scrapeInstagram } from "../src/lib/pipeline/scrape";
 import { findRoundupLinks, parseGoogleEvents, robotsAllows } from "../src/lib/pipeline/sources";
-import { localDate, titleSimilarity, zonedToUtc } from "../src/lib/pipeline/text";
+import { mergeDuplicates } from "../src/lib/pipeline/dedupe";
+import { localDate, nameKey, sameVenueKey, titleSimilarity, zonedToUtc } from "../src/lib/pipeline/text";
 
 let pool: Pool;
 beforeAll(async () => { pool = await freshDb(); await seed(pool); });
@@ -276,6 +277,56 @@ describe("pipeline", () => {
     expect(report.estimate).toMatchObject({ postsWaiting: 1, postsExpectedFromScrape: 15 });
     expect((await pool.query("SELECT processing_state, filter_result FROM raw_posts")).rows).toEqual([{ processing_state: "new", filter_result: null }]);
     expect((await pool.query("SELECT count(*) AS n FROM events")).rows[0].n).toBe(0);
+  });
+});
+
+describe("duplicates", () => {
+  it("treats a short venue name and its longer form as one place, but not unrelated names", () => {
+    const same = (a: string, b: string) => sameVenueKey(nameKey(a, "Indore"), nameKey(b, "Indore"));
+    expect(same("Ohlio", "Ohlio Gourmet Cafebar")).toBe(true);
+    expect(same("MARQ Indore", "Marq Club and Kitchen")).toBe(true);
+    expect(same("The Park", "Central Park")).toBe(false);
+    expect(same("Cafe", "Cafe Terazza")).toBe(false);
+    expect(same("Ohlio", "Ohliology")).toBe(false);
+  });
+
+  it("matches a new post to an existing venue written at a different length", async () => {
+    const llm = new FakeLlm((kind, text) => {
+      if (kind !== "extract") return DESCRIPTION;
+      return extraction([event(text.includes("@indore_gigs") ? { venue_name: f("The Blue Room Listening Bar"), venue_instagram_handle: null } : {})]);
+    });
+    const report = await ingest([post("P1", "the_blue_room", EVENT_CAPTION), post("P2", "indore_gigs", EVENT_CAPTION)], llm);
+    expect(report.resolve).toMatchObject({ created: 1, merged: 1 });
+    expect((await pool.query("SELECT name FROM venues")).rows).toEqual([{ name: "The Blue Room" }]);
+  });
+
+  it("merges venues and listings that were already stored twice, keeping every source", async () => {
+    const llm = new FakeLlm((kind) => (kind === "extract" ? extraction([event()]) : DESCRIPTION));
+    await ingest([post("P1", "the_blue_room", EVENT_CAPTION)], llm);
+    // A second copy of the same show under a longer spelling of the venue, as an older matching rule would have left it.
+    const { rows: [city] } = await pool.query("SELECT id FROM cities WHERE slug = 'indore'");
+    const { rows: [v2] } = await pool.query("INSERT INTO venues (city_id, slug, name, address) VALUES ($1, 'blue-room-bar', 'The Blue Room Listening Bar', '12 Example Road') RETURNING id", [city.id]);
+    const { rows: [e1] } = await pool.query("SELECT * FROM events");
+    const { rows: [e2] } = await pool.query(
+      `INSERT INTO events (city_id, venue_id, slug, title, starts_at, local_date, start_time_known, booking_url, confidence, is_published, origin)
+       VALUES ($1,$2,'aria-copy',$3,$4,$5,true,'https://tickets.example/aria',0.85,true,'scraped') RETURNING id`,
+      [city.id, v2.id, "Aria Quartet - Live", e1.starts_at, e1.local_date]);
+    await pool.query("INSERT INTO sources (event_id, source_type, url) VALUES ($1, 'web', 'https://news.example/aria')", [e2.id]);
+
+    const preview = await mergeDuplicates(pool, { dryRun: true });
+    expect(preview.venuesMerged).toEqual([{ kept: "The Blue Room", removed: "The Blue Room Listening Bar" }]);
+    expect((await pool.query("SELECT count(*) AS n FROM venues")).rows[0].n).toBe(2); // dry run changed nothing
+
+    const report = await mergeDuplicates(pool);
+    expect(report.eventsMerged).toMatchObject([{ kept: "Aria Quartet Live", removed: "Aria Quartet - Live", venue: "The Blue Room" }]);
+    const { rows: venues } = await pool.query("SELECT name, address, official_links FROM venues");
+    expect(venues).toEqual([{ name: "The Blue Room", address: "12 Example Road", official_links: { instagram: "the_blue_room" } }]);
+    const { rows: events } = await pool.query("SELECT title, booking_url, confidence FROM events");
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ title: "Aria Quartet Live", booking_url: "https://tickets.example/aria" });
+    expect(events[0].confidence).toBeCloseTo(1);
+    expect((await pool.query("SELECT url FROM sources ORDER BY id")).rows.map((r) => r.url)).toEqual(["https://www.instagram.com/p/P1/", "https://news.example/aria"]);
+    expect(await mergeDuplicates(pool)).toEqual({ venuesMerged: [], eventsMerged: [] }); // nothing left to merge
   });
 });
 

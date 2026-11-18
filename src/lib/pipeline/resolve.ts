@@ -14,7 +14,7 @@ import { ingestion } from "../../config";
 import type { ExtractedEvent, Extraction } from "./extract";
 import type { LlmClient, LlmRequest } from "./llm";
 import {
-  daysBetween, diceSimilarity, handleKey, isClockTime, isIsoDate, localDate, nameKey, slugify, titleSimilarity, zonedToUtc,
+  daysBetween, diceSimilarity, handleKey, isClockTime, isIsoDate, localDate, nameKey, sameVenueKey, slugify, titleSimilarity, zonedToUtc,
 } from "./text";
 
 export interface PostContext {
@@ -88,7 +88,7 @@ async function uniqueSlug(db: Db, table: "venues" | "artists" | "organisers" | "
 interface Named { id: number; name: string; instagram: string | null }
 
 /** Best existing row for a name: by Instagram handle, then exact key, then close spelling. */
-function bestMatch(rows: Named[], name: string, handle: string | null, cityName: string | undefined, fuzzy: number): Named | undefined {
+function bestMatch(rows: Named[], name: string, handle: string | null, cityName: string | undefined, fuzzy: number, venue = false): Named | undefined {
   if (handle) {
     const byHandle = rows.find((r) => r.instagram === handle);
     if (byHandle) return byHandle;
@@ -97,6 +97,11 @@ function bestMatch(rows: Named[], name: string, handle: string | null, cityName:
   if (!key) return undefined;
   const exact = rows.find((r) => nameKey(r.name, cityName) === key);
   if (exact) return exact;
+  if (venue) {
+    // "Ohlio" and "Ohlio Gourmet Cafebar" are one place.
+    const contained = rows.find((r) => sameVenueKey(nameKey(r.name, cityName), key));
+    if (contained) return contained;
+  }
   let best: Named | undefined;
   let bestScore = fuzzy;
   for (const r of rows) {
@@ -115,7 +120,7 @@ async function matchVenue(db: Db, ctx: PostContext, e: ExtractedEvent, create: b
   }
   const { rows } = await db.query<Named>(
     "SELECT id, name, official_links->>'instagram' AS instagram FROM venues WHERE city_id = $1", [ctx.cityId]);
-  const hit = bestMatch(rows, name, handle, ctx.cityName, 0.85);
+  const hit = bestMatch(rows, name, handle, ctx.cityName, 0.85, true);
   if (hit) {
     if (handle && !hit.instagram) {
       await db.query("UPDATE venues SET official_links = official_links || $2::jsonb, updated_at = now() WHERE id = $1",

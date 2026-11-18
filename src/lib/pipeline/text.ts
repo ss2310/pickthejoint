@@ -42,6 +42,26 @@ export function handleKey(handle: string, cityName?: string): string {
   return h;
 }
 
+const GENERIC_PLACE = new Set([
+  "cafe", "bar", "club", "hotel", "lounge", "restaurant", "auditorium", "hall", "ground", "grounds", "garden", "gardens",
+  "mall", "studio", "kitchen", "terrace", "rooftop", "banquet", "resort", "college", "school", "temple", "stadium",
+]);
+
+/**
+ * Whether two venue name keys are the same place written at different
+ * lengths: one is the other plus trailing words ("ohlio" and "ohlio gourmet
+ * cafebar"). The shared part must be a real name, not a generic word like
+ * "cafe", and must come first, so "park" never matches "central park".
+ */
+export function sameVenueKey(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  if (!long.startsWith(`${short} `)) return false;
+  const words = short.split(" ");
+  return words.some((w) => w.length >= 4 && !GENERIC_PLACE.has(w));
+}
+
 function bigrams(s: string): Map<string, number> {
   const t = s.replace(/\s+/g, " ");
   const m = new Map<string, number>();
