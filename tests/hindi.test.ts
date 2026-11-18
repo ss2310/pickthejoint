@@ -202,5 +202,8 @@ describe("translation", () => {
     expect(acceptable(item("artist", "name", "U4ria"), "U4ria")).toBe(true);
     expect(acceptable(item("event", "description", "A long evening of music."), "A long evening of music.")).toBe(false);
     expect(acceptable(item("event", "description", "Music."), "")).toBe(false);
+    // A half-transliterated word is rejected, for names too.
+    expect(acceptable(item("event", "title", "In Case We Forget India Tour"), "इन केस वी फॉरगेट इंडिया टour")).toBe(false);
+    expect(acceptable(item("event", "title", "Esani Dey Live at MARQ"), "एसानी डे लाइव एट MARQ")).toBe(true);
   });
 });

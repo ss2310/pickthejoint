@@ -67,7 +67,10 @@ WITH src AS (
 SELECT src.type, src.id, src.field, src.text, md5(src.text) AS hash
 FROM src LEFT JOIN translations t
   ON t.entity_type = src.type AND t.entity_id = src.id AND t.locale = $1 AND t.field = src.field
-WHERE src.text IS NOT NULL AND btrim(src.text) <> '' AND (t.id IS NULL OR t.source_hash IS DISTINCT FROM md5(src.text))
+WHERE src.text IS NOT NULL AND btrim(src.text) <> ''
+  AND (t.id IS NULL OR t.source_hash IS DISTINCT FROM md5(src.text)
+       -- A stored translation with a word half in Devanagari and half in Latin letters ("टour") is redone.
+       OR t.text ~ '[ऀ-ॿ][A-Za-z]|[A-Za-z][ऀ-ॿ]')
 ORDER BY src.rank, src.id, src.field`;
 
 export async function pendingItems(pool: Pool): Promise<Item[]> {
@@ -117,11 +120,14 @@ function request(id: string, items: Item[], settled: Map<string, string>): LlmRe
 }
 
 const DEVANAGARI = /[ऀ-ॿ]/;
+const MIXED_WORD = /[ऀ-ॿ][A-Za-z]|[A-Za-z][ऀ-ॿ]/;
 
 /** A translation we are willing to store: something came back, of a believable length, and running text is actually in Hindi. */
 export function acceptable(item: Item, text: string): boolean {
   const t = text.trim();
   if (!t || t.length > item.text.length * 4 + 40) return false;
+  // A word that switches script half way ("टour") is a garbled transliteration, never real Hindi.
+  if (MIXED_WORD.test(t)) return false;
   if (isName(item)) return true;
   // Prices and other short lines may be all digits and symbols; longer text must contain Hindi.
   return DEVANAGARI.test(t) || !/[A-Za-z]{4,}/.test(item.text);
