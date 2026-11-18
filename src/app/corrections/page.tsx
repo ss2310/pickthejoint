@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Editorial, pageMeta } from "@/components/editorial";
 import { site } from "@/config";
 
+// Rendered on request, so the contact address always reflects the current CONTACT_EMAIL setting.
+export const dynamic = "force-dynamic";
 export const metadata = pageMeta("Corrections and takedown",
   "How to report a wrong listing on Pick the Joint, or ask for an event, venue or profile page to be changed or removed.", "/corrections");
 
