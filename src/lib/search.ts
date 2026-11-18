@@ -28,7 +28,7 @@ import { listEvents, type City, type EventCard, type EventFilter } from "./queri
 import { rateAllow } from "./security";
 
 /** Bump when the rules or the model's instructions change: older cached answers are then ignored. */
-export const PARSER_VERSION = 1;
+export const PARSER_VERSION = 2;
 
 export const WHEN = [
   "today", "tonight", "tomorrow", "day_after_tomorrow", "this_weekend", "next_weekend", "this_week", "next_week",
@@ -169,6 +169,7 @@ happening happen going go goin do doing things thing stuff fun good best nice co
 need please plz pls tell let know list all upcoming new latest city town place places spot spots hangout hang out plan plans program programme
 programs programmes evening morning afternoon night late can could should will would get got have has am live ticket tickets booking book
 maybe perhaps like just also kind type sort really very more other etc someone anyone people friends
+jo cheap cheaper budget affordable under below less than within sasta sasti saste kam se kam rupees rs inr
 near me close by around me whats on going on something to do things to do
 kya hai hain ha he h mein me main mai mei ka ki ke ko se par pe paas pas koi kuch kahan kaha kidhar kab kaun kon hoga hogi honge ho raha rahi
 rahe chal chalo chalna chalein jaana jana dekhne dekhna dekho dikhao batao bataiye bata accha acha achha achchha badhiya badiya mast maza
@@ -255,6 +256,8 @@ export interface RuleParse {
   leftovers: string[];
   /** True when the rules read the whole query and the model need not be asked. */
   resolved: boolean;
+  /** Filters the rules found exactly one value for, even when the query as a whole needs the model. */
+  certain: Partial<ParsedQuery>;
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -352,7 +355,13 @@ export function parseByRules(query: string, v: Vocabulary): RuleParse {
   const plainWords = leftovers.length <= cfg.maxRuleKeywords && leftovers.every((w) => w.length > 1 && !/\d/.test(w));
   const resolved = !conflict && (leftovers.length === 0 || plainWords);
   if (resolved) parsed.keywords = leftovers;
-  return { parsed, leftovers, resolved };
+  const certain: Partial<ParsedQuery> = {};
+  if (!whenConflict && parsed.when) Object.assign(certain, { when: parsed.when, weekday: parsed.weekday, dateFrom: parsed.dateFrom, dateTo: parsed.dateTo });
+  if (seen.category.size === 1) certain.category = parsed.category;
+  if (seen.area.size === 1) certain.area = parsed.area;
+  if (seen.city.size === 1) certain.city = parsed.city;
+  if (seen.price.size === 1) certain.price = parsed.price;
+  return { parsed, leftovers, resolved, certain };
 }
 
 // ---------------------------------------------------------------- model
@@ -375,12 +384,12 @@ function modelSystem(v: Vocabulary): string {
   const named = (x: { slug: string; name: string; hi?: string | null }) => `${x.slug} (${x.name}${x.hi && x.hi !== x.name ? `, ${x.hi}` : ""})`;
   return `You turn a search typed on an events listing site for Indian cities into search filters. The search may be in English, Hindi (Devanagari) or Hinglish (Hindi written in Latin letters), and may be misspelt.
 Answer only with the filters. Use only the values listed below, and null for anything the search does not ask for. Never add a filter the search does not ask for.
-- when: today, tonight, tomorrow, day_after_tomorrow, this_weekend, next_weekend, this_week, next_week, this_month, next_month; or weekday / next_weekday with weekday set ("this saturday" is weekday, "next saturday" is next_weekday); or date, with date_from (and date_to for a range) written MM-DD, with no year.
+- when: today, tonight, tomorrow, day_after_tomorrow, this_weekend, next_weekend, this_week, next_week, this_month, next_month; or weekday / next_weekday with weekday set ("this saturday" and "on sunday evening" are weekday, "next saturday" is next_weekday); or date, with date_from (and date_to for a range) written MM-DD, with no year. Set it whenever the search names a day or a time span, even in passing.
 - category: one of the category slugs below.
-- area: one of the area slugs below, only when the search names that locality or a recognisable spelling of it.
+- area: one of the area slugs below, only when the search names that locality or a recognisable spelling of it. If the place could be more than one area (for example "Palasia" for both Old Palasia and New Palasia), use null and put the place word in keywords instead.
 - city: one of the city slugs below, only when the search names it.
-- price: free or paid, only when the search asks for it.
-- keywords: at most 4 words copied exactly from the search that name a particular performer, venue, organiser, genre or kind of event that the filters above do not cover. Leave out filler words, dates, places and words that only name a category.
+- price: free only when the search asks for free entry; paid only when it asks for ticketed or paid events. A wish for something cheap or under an amount is neither: use null.
+- keywords: at most 4 words copied exactly from the search that name a particular performer, venue, organiser, genre or kind of event that the filters above do not cover. Leave out filler words, dates, times, places, numbers, amounts, words about price or quality (cheap, sasta, best, achha) and words that only name a category.
 
 Categories: ${v.categories.map(named).join("; ")}
 Areas of ${v.city.name}: ${v.areas.map(named).join("; ") || "(none)"}
@@ -394,7 +403,7 @@ function cleanKeywords(words: string[], normalized: string, v: Vocabulary): stri
   const out: string[] = [];
   for (const w of words) {
     for (const token of foldText(w).split(" ")) {
-      if (token.length > 1 && inQuery.has(token) && !dict.has(token) && !out.includes(token)) out.push(token);
+      if (token.length > 1 && !/^\d+$/.test(token) && inQuery.has(token) && !dict.has(token) && !out.includes(token)) out.push(token);
     }
   }
   return out.slice(0, 4);
@@ -469,7 +478,15 @@ export async function understand(pool: Pool, llm: LlmClient, input: UnderstandIn
     if (res) console.error(`[search] model parse failed: ${res.error}`);
     return fallback("error", res?.usd ?? 0);
   }
-  const parsed = fromModel(res.data, normalized, input.vocab);
+  // Where the model left a filter empty but the rules found exactly one value for it, the rules' value stands.
+  const answer = fromModel(res.data, normalized, input.vocab);
+  const parsed: ParsedQuery = {
+    ...answer,
+    ...(answer.when ? {} : { when: rules.certain.when, weekday: rules.certain.weekday, dateFrom: rules.certain.dateFrom, dateTo: rules.certain.dateTo }),
+    category: answer.category ?? rules.certain.category, area: answer.area ?? rules.certain.area,
+    city: answer.city ?? rules.certain.city, price: answer.price ?? rules.certain.price,
+  };
+  for (const k of Object.keys(parsed) as (keyof ParsedQuery)[]) if (parsed[k] === undefined) delete parsed[k];
   await pool.query(
     `INSERT INTO search_parse_cache (city_id, normalized, version, parsed, created_at, last_used_at) VALUES ($1, $2, $3, $4, $5, $5)
      ON CONFLICT (city_id, normalized, version) DO UPDATE SET parsed = EXCLUDED.parsed, created_at = EXCLUDED.created_at, hits = 0`,
