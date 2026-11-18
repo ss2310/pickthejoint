@@ -139,14 +139,20 @@ export async function runCensus(
 }
 
 /**
- * Keeps the census and the venue list together: every listed venue gets a
- * census row, and a census row with the same name as a venue is linked to it.
+ * Keeps the census and the venue list together: every venue with a published
+ * event gets a census row (venues whose events were all taken down, such as
+ * ones in another city, leave it), and a census row with the same name as a venue is linked to it.
  * Free; housekeeping runs it daily. Returns the number of links made.
  */
 export async function linkCensus(pool: Pool, cityId?: number): Promise<number> {
-  const venues = (await pool.query<{ id: number; city_id: number; name: string; city_name: string; instagram: string | null }>(
-    `SELECT v.id, v.city_id, v.name, c.name AS city_name, v.official_links->>'instagram' AS instagram
+  const venues = (await pool.query<{ id: number; city_id: number; name: string; city_name: string; instagram: string | null; published: boolean }>(
+    `SELECT v.id, v.city_id, v.name, c.name AS city_name, v.official_links->>'instagram' AS instagram,
+            EXISTS (SELECT 1 FROM events e WHERE e.venue_id = v.id AND e.is_published) AS published
      FROM venues v JOIN cities c ON c.id = v.city_id WHERE ($1::bigint IS NULL OR v.city_id = $1)`, [cityId ?? null])).rows;
+  // A venue copied in from an event whose events were all taken down (out of the city, or not real) leaves the census.
+  await pool.query(
+    `DELETE FROM venue_census vc WHERE vc.source = 'event' AND ($1::bigint IS NULL OR vc.city_id = $1)
+       AND NOT EXISTS (SELECT 1 FROM events e WHERE e.venue_id = vc.venue_id AND e.is_published)`, [cityId ?? null]);
   let linked = 0;
   for (const v of venues) {
     const key = nameKey(v.name, v.city_name);
@@ -157,6 +163,7 @@ export async function linkCensus(pool: Pool, cityId?: number): Promise<number> {
       "UPDATE venue_census SET venue_id = $1 WHERE id = (SELECT id FROM venue_census WHERE city_id = $2 AND name_key = $3 AND venue_id IS NULL ORDER BY id LIMIT 1) RETURNING id",
       [v.id, v.city_id, key]);
     if (match.rowCount) { linked++; continue; }
+    if (!v.published) continue;
     await pool.query(
       `INSERT INTO venue_census (city_id, name, name_key, source, source_ref, venue_id, instagram_handle)
        VALUES ($1,$2,$3,'event',$4,$5,$6) ON CONFLICT DO NOTHING`,

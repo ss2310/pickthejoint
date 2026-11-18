@@ -138,6 +138,11 @@ describe("venue census", () => {
     const venue = (await pool.query<{ id: number }>(
       "INSERT INTO venues (city_id, slug, name, official_links) VALUES ($1,'ohlio','Ohlio Gourmet Cafebar','{}') RETURNING id", [cityId])).rows[0].id;
     await pool.query("INSERT INTO venues (city_id, slug, name) VALUES ($1,'coffeenism','Coffeenism')", [cityId]);
+    const coffee = (await pool.query<{ id: number }>("SELECT id FROM venues WHERE slug = 'coffeenism'")).rows[0].id;
+    await pool.query("INSERT INTO events (city_id, venue_id, slug, title, starts_at, origin, is_published) VALUES ($1,$2,'c','C', now() + interval '1 day','scraped',true)", [cityId, coffee]);
+    // A venue whose only event was taken down (it was in another city) stays out of the census.
+    const dallas = (await pool.query<{ id: number }>("INSERT INTO venues (city_id, slug, name) VALUES ($1,'harwood-park','Harwood Park') RETURNING id", [cityId])).rows[0].id;
+    await pool.query("INSERT INTO events (city_id, venue_id, slug, title, starts_at, origin, is_published) VALUES ($1,$2,'h','H', now(),'scraped',false)", [cityId, dallas]);
     let busy = 1;
     const ok = site({ "https://overpass-api.de/api/interpreter": JSON.stringify(overpass) });
     // The first request finds the server busy; the census tries again.
@@ -160,6 +165,7 @@ describe("venue census", () => {
     const quiet = await censusGaps(pool, { gap: "quiet" });
     expect(quiet.map((r) => r.name)).not.toContain("Ohlio Gourmet Cafebar");
     expect(quiet.map((r) => r.name)).toContain("DAVV Auditorium");
+    expect((await pool.query("SELECT 1 FROM venue_census WHERE name = 'Harwood Park'")).rowCount).toBe(0);
   });
 });
 
