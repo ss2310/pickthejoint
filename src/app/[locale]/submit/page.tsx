@@ -101,7 +101,9 @@ export default async function SubmitPage({ params, searchParams }: Props) {
           <h2 id="form-heading">{m.formHeading}</h2>
           <p className="muted small">{m.formLead}</p>
           {draft?.poster_id && <p className="small">{m.posterAttached}</p>}
-          <form action={sendEvent} className="form-grid">
+          {/* Keyed by the draft (and its last save), so the browser builds the form afresh with the draft's values:
+              after a client-side redirect, selects and checkboxes would otherwise keep their old state. */}
+          <form action={sendEvent} className="form-grid" key={draft ? `${draft.token}-${draft.updated_at.valueOf()}` : "new"}>
             <input type="hidden" name="locale" value={locale} />
             {draft && <input type="hidden" name="draft" value={draft.token} />}
             {/* A field people never see. Bots fill it in. */}
