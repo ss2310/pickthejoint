@@ -188,7 +188,13 @@ describe("venue geocoding", () => {
     const { rows } = await pool.query("SELECT item_type, reason FROM review_queue WHERE item_type = 'venue_geocode'");
     expect(rows).toEqual([{ item_type: "venue_geocode", reason: "geocoder match is not confident enough to publish" }]);
     expect((await geocodeVenues(pool, { fetchFn, delayMs: 0 })).tried).toBe(0);
-    expect(urls).toHaveLength(2);
+    // City Grounds was not found by name, so its address was looked up as well.
+    expect(urls).toHaveLength(3);
+    expect(decodeURIComponent(urls[2].replace(/\+/g, " "))).toContain("q=Race Course Road, Indore");
+
+    // Enrichment clears geocoded_at when it adds an address: the venue is then tried again.
+    await pool.query("UPDATE venues SET geocoded_at = NULL WHERE slug = 'city-grounds'");
+    expect((await geocodeVenues(pool, { fetchFn, delayMs: 0 })).tried).toBe(1);
   });
 });
 

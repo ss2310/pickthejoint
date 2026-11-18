@@ -136,15 +136,25 @@ export async function getEvent(citySlug: string, slug: string): Promise<EventDet
 export interface VenueDetail extends Named {
   city_id: number; city_slug: string; city_name: string; city_state: string; timezone: string; venue_type: string | null;
   address: string | null; lat: number | null; lng: number | null; capacity: number | null; parking: string | null;
-  how_to_reach: string | null; description: string | null; official_links: Record<string, string>; same_as: string[];
-  area_name: string | null; area_slug: string | null; updated_at: Date;
+  how_to_reach: string | null; landmarks: string | null; description: string | null; official_links: Record<string, string>; same_as: string[];
+  area_name: string | null; area_slug: string | null; updated_at: Date; sources: EntitySource[];
 }
+
+/** A page a venue, artist or organiser page draws on, with the facts taken from it. */
+export interface EntitySource { url: string; title: string | null; facts: string[] }
+
+/** Sources for an entity page, one row per page, in the order they were first stored. */
+const entitySources = (type: "venue" | "artist" | "organiser", idColumn: string) => `
+  coalesce((SELECT json_agg(json_build_object('url', s.url, 'title', s.title, 'facts', s.facts) ORDER BY s.first_id)
+            FROM (SELECT es.url, max(es.title) AS title, min(es.id) AS first_id,
+                         coalesce(array_agg(DISTINCT es.fact) FILTER (WHERE es.fact IS NOT NULL), '{}') AS facts
+                  FROM entity_sources es WHERE es.entity_type = '${type}' AND es.entity_id = ${idColumn} GROUP BY es.url) s), '[]') AS sources`;
 
 export async function getVenue(citySlug: string, slug: string): Promise<VenueDetail | null> {
   const { rows } = await getPool().query<VenueDetail>(
     `SELECT v.id, v.slug, v.name, v.city_id, c.slug AS city_slug, c.name AS city_name, c.state AS city_state, c.timezone,
-            v.venue_type, v.address, v.lat, v.lng, v.capacity, v.parking, v.how_to_reach, v.description, v.official_links,
-            v.same_as, a.name AS area_name, a.slug AS area_slug, v.updated_at
+            v.venue_type, v.address, v.lat, v.lng, v.capacity, v.parking, v.how_to_reach, v.landmarks, v.description, v.official_links,
+            v.same_as, a.name AS area_name, a.slug AS area_slug, v.updated_at, ${entitySources("venue", "v.id")}
      FROM venues v JOIN cities c ON c.id = v.city_id LEFT JOIN areas a ON a.id = v.area_id
      WHERE c.slug = $1 AND v.slug = $2 AND c.is_live
        AND EXISTS (SELECT 1 FROM events e WHERE e.venue_id = v.id AND e.is_published)`,
@@ -156,16 +166,16 @@ export async function getVenue(citySlug: string, slug: string): Promise<VenueDet
 export interface PersonDetail extends Named {
   kind?: string; genre?: string | null; hometown?: string | null; bio: string | null;
   official_links: Record<string, string>; same_as: string[]; updated_at: Date;
-  sources: { url: string; title: string | null }[];
+  /** Artists only: notable works that link out to official platforms. */
+  notable_works?: { title: string; url: string; platform: string; year: string | null }[];
+  sources: EntitySource[];
 }
 
 async function getPerson(table: "artists" | "organisers", join: "event_artists" | "event_organisers", fk: string, slug: string) {
-  const extra = table === "artists" ? "p.kind, p.genre, p.hometown," : "";
+  const extra = table === "artists" ? "p.kind, p.genre, p.hometown, p.notable_works," : "";
   const type = table === "artists" ? "artist" : "organiser";
   const { rows } = await getPool().query<PersonDetail>(
-    `SELECT p.id, p.slug, p.name, ${extra} p.bio, p.official_links, p.same_as, p.updated_at,
-            coalesce((SELECT json_agg(json_build_object('url', es.url, 'title', es.title) ORDER BY es.id)
-                      FROM entity_sources es WHERE es.entity_type = '${type}' AND es.entity_id = p.id), '[]') AS sources
+    `SELECT p.id, p.slug, p.name, ${extra} p.bio, p.official_links, p.same_as, p.updated_at, ${entitySources(type, "p.id")}
      FROM ${table} p
      WHERE p.slug = $1 AND EXISTS (SELECT 1 FROM ${join} j JOIN events e ON e.id = j.event_id WHERE j.${fk} = p.id AND e.is_published)`,
     [slug],

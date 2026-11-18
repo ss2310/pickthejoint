@@ -25,6 +25,10 @@ export interface JobArgs {
   processOnly: boolean;
   /** Housekeeping: run the crawl access check now instead of waiting for Monday. */
   crawlCheck: boolean;
+  /** Enrichment: which kinds of entity to work on (venue, artist, organiser). */
+  types?: string[];
+  /** Enrichment: these slugs only, even if already enriched. */
+  slugs?: string[];
   /** Fail on purpose, to prove the failure alert arrives. */
   failOnPurpose: boolean;
 }
@@ -48,6 +52,8 @@ export function parseArgs(argv: string[]): JobArgs {
     sources: list("sources") ?? ["instagram", "google", "news"],
     processOnly: argv.includes("--process-only"),
     crawlCheck: argv.includes("--crawl-check"),
+    types: list("types"),
+    slugs: list("slugs"),
     failOnPurpose: argv.includes("--fail-on-purpose") || process.env.FAIL_ON_PURPOSE === jobNameFromArgv(),
   };
 }

@@ -3,8 +3,11 @@
  * usage policy allows this: identified by a User-Agent with a contact address,
  * at most one request a second, small volumes, results stored (OSM data is
  * open under the ODbL, credited on the "how we verify" page).
- * Each venue is tried once. A confident match is saved; a doubtful one goes to
- * the review queue instead of onto the page.
+ * Each venue is tried once, and once more when enrichment gives it an address
+ * (enrich.ts clears geocoded_at). The venue is looked up by name first; if that
+ * finds nothing sure and an address is on file, the address is looked up too.
+ * A confident match is saved; a doubtful one goes to the review queue instead
+ * of onto the page.
  */
 import type { Pool } from "pg";
 import { site } from "../../config";
@@ -29,6 +32,23 @@ export function matchConfidence(venueName: string, cityName: string, c: Candidat
   return Math.min(0.8, diceSimilarity(want, got));
 }
 
+/** Kinds of result that are a single place (a building, a shop, a hall) rather than a street or district. */
+const POINT_CLASSES = new Set(["amenity", "building", "shop", "tourism", "leisure", "office", "place", "craft", "club", "historic"]);
+
+/**
+ * How sure we are that a result for the venue's address is the venue. A result
+ * carrying the venue's name is judged as a name match. Any other single place at
+ * that address may be the shop next door, so it is only ever good enough for
+ * review, never for the page.
+ */
+export function addressConfidence(venueName: string, cityName: string, c: Candidate): number {
+  const byName = matchConfidence(venueName, cityName, c);
+  if (byName >= 0.8) return byName;
+  if (byName === 0) return 0;
+  if (AREA_TYPES.has(c.addresstype ?? "") || AREA_TYPES.has(c.type ?? "")) return 0.3;
+  return POINT_CLASSES.has(c.category ?? "") ? 0.6 : 0.4;
+}
+
 export async function geocodeVenues(
   pool: Pool, opts: { fetchFn?: typeof fetch; limit?: number; delayMs?: number; minConfidence?: number } = {},
 ): Promise<GeocodeReport> {
@@ -45,14 +65,23 @@ export async function geocodeVenues(
   for (const v of rows) {
     report.tried++;
     try {
-      const q = [v.name, v.area, v.city, v.state, "India"].filter(Boolean).join(", ");
-      const res = await fetchFn(`https://nominatim.openstreetmap.org/search?${new URLSearchParams({ q, format: "jsonv2", limit: "3", countrycodes: "in" })}`, {
-        headers: { "User-Agent": `PickTheJointBot/1.0 (+${site.url}/about${site.contactEmail ? `; ${site.contactEmail}` : ""})`, Accept: "application/json" },
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (!res.ok) throw new Error(`geocoder answered ${res.status}`);
-      const candidates = (await res.json()) as Candidate[];
-      const scored = candidates.map((c) => ({ c, confidence: matchConfidence(v.name, v.city, c) })).sort((a, b) => b.confidence - a.confidence);
+      const search = async (query: string) => {
+        const res = await fetchFn(`https://nominatim.openstreetmap.org/search?${new URLSearchParams({ q: query, format: "jsonv2", limit: "3", countrycodes: "in" })}`, {
+          headers: { "User-Agent": `PickTheJointBot/1.0 (+${site.url}/about${site.contactEmail ? `; ${site.contactEmail}` : ""})`, Accept: "application/json" },
+          signal: AbortSignal.timeout(20_000),
+        });
+        if (!res.ok) throw new Error(`geocoder answered ${res.status}`);
+        return (await res.json()) as Candidate[];
+      };
+      let q = [v.name, v.area, v.city, v.state, "India"].filter(Boolean).join(", ");
+      let scored = (await search(q)).map((c) => ({ c, confidence: matchConfidence(v.name, v.city, c) })).sort((a, b) => b.confidence - a.confidence);
+      if (v.address && !(scored[0]?.confidence >= min)) {
+        // The name alone was not enough: try the address (one request a second, as the geocoder asks).
+        await new Promise((r) => setTimeout(r, opts.delayMs ?? 1100));
+        const byAddress = [v.address, v.address.toLowerCase().includes(v.city.toLowerCase()) ? null : v.city, v.state, "India"].filter(Boolean).join(", ");
+        const found = (await search(byAddress)).map((c) => ({ c, confidence: addressConfidence(v.name, v.city, c) })).sort((a, b) => b.confidence - a.confidence);
+        if (found[0] && found[0].confidence > (scored[0]?.confidence ?? 0)) { scored = found; q = byAddress; }
+      }
       const best = scored[0];
       if (best && best.confidence >= min) {
         await pool.query("UPDATE venues SET lat = $2, lng = $3, geocode_confidence = $4, geocoded_at = now(), updated_at = now() WHERE id = $1",
