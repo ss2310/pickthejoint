@@ -95,7 +95,7 @@ export interface CensusReport {
 
 /** Adds or refreshes a city's OpenStreetMap places, then links census rows and venues. */
 export async function runCensus(
-  pool: Pool, opts: { city: string; dryRun?: boolean; fetchFn?: typeof fetch },
+  pool: Pool, opts: { city: string; dryRun?: boolean; fetchFn?: typeof fetch; retryDelayMs?: number },
 ): Promise<CensusReport> {
   const report: CensusReport = { city: opts.city, status: "ok", placesFound: 0, added: 0, updated: 0, byType: {}, linked: 0 };
   const city = (await pool.query<{ id: number; name: string }>("SELECT id, name FROM cities WHERE slug = $1", [opts.city])).rows[0];
@@ -103,14 +103,20 @@ export async function runCensus(
   const bbox = forCity(opts.city).censusBbox;
   if (!bbox) { report.status = "no censusBbox for this city in data/sourcing.json"; return report; }
   const fetchFn = opts.fetchFn ?? fetch;
-  const res = await fetchFn(sourcing.census.overpassUrl, {
-    method: "POST",
-    headers: { "User-Agent": sourcing.userAgent, "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ data: overpassQuery(bbox) }).toString(),
-    signal: AbortSignal.timeout(120_000),
-  });
-  if (!res.ok) { report.status = `Overpass returned ${res.status}`; return report; }
-  const places = parseOverpass(await res.json());
+  // The public Overpass servers are often busy (429, 502, 504): try three times, a minute apart.
+  let res: Response | undefined;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    res = await fetchFn(sourcing.census.overpassUrl, {
+      method: "POST",
+      headers: { "User-Agent": sourcing.userAgent, "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ data: overpassQuery(bbox) }).toString(),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (res.ok || ![429, 502, 503, 504].includes(res.status) || attempt === 3) break;
+    await new Promise((r) => setTimeout(r, opts.retryDelayMs ?? 60_000));
+  }
+  if (!res!.ok) { report.status = `Overpass returned ${res!.status} three times`; return report; }
+  const places = parseOverpass(await res!.json());
   report.placesFound = places.length;
   for (const p of places) report.byType[p.type] = (report.byType[p.type] ?? 0) + 1;
   if (opts.dryRun) { report.status = "dry run: nothing written"; return report; }

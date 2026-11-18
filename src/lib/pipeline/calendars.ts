@@ -200,7 +200,8 @@ export async function fetchCalendars(pool: Pool, llm: LlmClient, opts: CalendarO
     for (const src of enabledCalendars(city.slug).filter((c) => !opts.only || opts.only.includes(c.key))) {
       const rep: CalendarReport = { source: `${city.slug}:${src.key}`, status: "ok", pagesFetched: 0, itemsSeen: 0, alreadyStored: 0, skipped: 0, read: 0, eventsExtracted: 0, modelUsd: 0 };
       reports.push(rep);
-      const due = opts.force || await claimFetch(pool, `web:${city.slug}:${src.key}`, src.everyDays * 24 - 4, !!opts.dryRun);
+      // A forced run ignores the schedule but still records the read.
+      const due = await claimFetch(pool, `web:${city.slug}:${src.key}`, opts.force ? 0 : src.everyDays * 24 - 4, !!opts.dryRun);
       if (!due) { rep.status = `not due (read every ${src.everyDays} days)`; continue; }
       try {
         const origin = new URL(src.url).origin;

@@ -90,6 +90,8 @@ export interface FacebookReport {
   eventsReturned: number;
   alreadyStored: number;
   skipped: number;
+  /** Why items were set aside (first few), so a change in the actor's output shows up in the run report. */
+  skipReasons: string[];
   newEvents: number;
   eventsExtracted: number;
   scrapeUsd: number;
@@ -101,7 +103,7 @@ export async function fetchFacebookEvents(
   opts: { jobName: string; dryRun?: boolean; city?: string; maxPages?: number; force?: boolean; batch?: boolean },
 ): Promise<FacebookReport> {
   const cfg = sourcing.facebook;
-  const rep: FacebookReport = { status: "ok", pagesKnown: 0, pagesAdded: 0, pagesChecked: 0, eventsReturned: 0, alreadyStored: 0, skipped: 0, newEvents: 0, eventsExtracted: 0, scrapeUsd: 0, modelUsd: 0 };
+  const rep: FacebookReport = { status: "ok", pagesKnown: 0, pagesAdded: 0, pagesChecked: 0, eventsReturned: 0, alreadyStored: 0, skipped: 0, skipReasons: [], newEvents: 0, eventsExtracted: 0, scrapeUsd: 0, modelUsd: 0 };
   if (!cfg.enabled) { rep.status = "switched off (FACEBOOK_EVENTS=off)"; return rep; }
   const cities = (await pool.query<{ id: number; slug: string; name: string; timezone: string }>(
     "SELECT id, slug, name, timezone FROM cities WHERE is_live AND ($1::text IS NULL OR slug = $1) ORDER BY id", [opts.city ?? null])).rows;
@@ -114,7 +116,7 @@ export async function fetchFacebookEvents(
       [city.id, Math.min(opts.maxPages ?? cfg.maxPagesPerRun, cfg.maxPagesPerRun)])).rows;
     rep.pagesKnown += Number((await pool.query<{ n: string }>("SELECT count(*) AS n FROM facebook_pages WHERE city_id = $1 AND active", [city.id])).rows[0].n);
     if (pages.length === 0) { rep.status = "no Facebook pages on record yet"; continue; }
-    const due = opts.force || await claimFetch(pool, `facebook:${city.slug}`, cfg.everyHours, !!opts.dryRun);
+    const due = await claimFetch(pool, `facebook:${city.slug}`, opts.force ? 0 : cfg.everyHours, !!opts.dryRun);
     if (!due) { rep.status = "not due (read weekly)"; continue; }
 
     const maxItems = pages.length * cfg.maxEventsPerPage;
@@ -143,9 +145,15 @@ export async function fetchFacebookEvents(
     const fresh: { shortcode: string; url: string; name: string; text: string; page: string }[] = [];
     for (const item of items) {
       const e = facebookEvent(item);
-      if (!e) { rep.skipped++; continue; }
+      const skip = (why: string) => { rep.skipped++; if (rep.skipReasons.length < 5) rep.skipReasons.push(why.slice(0, 200)); };
+      if (!e) {
+        const err = item.error ?? item.errorDescription ?? item.message;
+        skip(err ? `actor said: ${String(err)}` : `unreadable item with fields: ${Object.keys(item).slice(0, 12).join(", ")}`);
+        continue;
+      }
       const day = e.startDate ? localDate(new Date(e.startDate), city.timezone) : null;
-      if (e.online || (day && day < today && !e.endDate)) { rep.skipped++; continue; }
+      if (e.online) { skip(`online event: ${e.name}`); continue; }
+      if (day && day < today && !e.endDate) { skip(`already past (${day}): ${e.name}`); continue; }
       const shortcode = `fb:${e.id}`;
       if ((await pool.query("SELECT 1 FROM raw_posts WHERE shortcode = $1", [shortcode])).rowCount) { rep.alreadyStored++; continue; }
       const page = pages.find((p) => typeof item.inputUrl === "string" && item.inputUrl.includes(`/${p.page}/`))?.page ?? "facebook";
