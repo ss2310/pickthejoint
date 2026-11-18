@@ -1,42 +1,34 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getPool } from "@/lib/db";
+import { HubPage, hubMetadata } from "@/components/hub-page";
+import { JsonLd } from "@/components/ui";
+import { resolveHub } from "@/lib/hubs";
+import { getCity, listCategories } from "@/lib/queries";
+import { siteLd } from "@/lib/schema";
 
-// Placeholder city home (Prompt 1). Server-rendered; real hub content arrives in Prompt 3.
-export const dynamic = "force-dynamic";
+// City home. Rebuilt at most every 10 minutes, so new listings and the day rolling over show up without a deploy.
+export const revalidate = 600;
 
-interface City { id: number; slug: string; name: string; state: string }
+type Props = { params: Promise<{ city: string }> };
 
-async function getCity(slug: string): Promise<City | null> {
-  const { rows } = await getPool().query<City>(
-    "SELECT id, slug, name, state FROM cities WHERE slug = $1 AND is_live",
-    [slug.toLowerCase()],
-  );
-  return rows[0] ?? null;
+async function load(params: Props["params"]) {
+  const city = await getCity((await params).city);
+  if (!city) return null;
+  return { city, hub: resolveHub(city, undefined, await listCategories())! };
 }
 
-export async function generateMetadata({ params }: { params: Promise<{ city: string }> }): Promise<Metadata> {
-  const city = await getCity((await params).city);
-  if (!city) return {};
-  return {
-    title: `Events in ${city.name}`,
-    description: `Concerts, comedy, theatre, workshops and more happening in ${city.name}. Coming soon.`,
-    robots: { index: false, follow: true }, // placeholder: keep out of the index until real content exists
-  };
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const found = await load(params);
+  return found ? hubMetadata(found.hub) : {};
 }
 
-export default async function CityHome({ params }: { params: Promise<{ city: string }> }) {
-  const city = await getCity((await params).city);
-  if (!city) notFound();
+export default async function CityHome({ params }: Props) {
+  const found = await load(params);
+  if (!found) notFound();
   return (
-    <main>
-      <h1>Events in {city.name}</h1>
-      <p>
-        Pick the Joint is building a complete, verified guide to what&apos;s on in {city.name}, {city.state}:
-        gigs, comedy, theatre, workshops, college and community events, with the source and a
-        &ldquo;last verified&rdquo; date on every listing.
-      </p>
-      <p className="muted">Listings are coming soon.</p>
-    </main>
+    <>
+      <HubPage city={found.city} hub={found.hub} />
+      <JsonLd data={siteLd()} />
+    </>
   );
 }
