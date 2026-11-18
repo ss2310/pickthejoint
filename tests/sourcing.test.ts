@@ -407,3 +407,20 @@ describe("coverage report and outreach list", () => {
     expect(listedSnippet("https://x", 'A "B" & C')).toBe('<a href="https://x" title="A &quot;B&quot; &amp; C on Pick the Joint">Listed on Pick the Joint</a>');
   });
 });
+
+describe("description writer guards", () => {
+  it("passes no invented end time and drops sentences about missing facts", async () => {
+    const { dropMissingFactSentences, facts } = await import("../src/lib/pipeline/write");
+    const base = { id: 1, title: "Ger", start_time_known: false, price_text: null, is_free: null, has_booking: false, venue: "Rajwada",
+      area: null, city: "Indore", timezone: "Asia/Kolkata", category: "festivals", performers: null, organisers: null };
+    const day = facts({ ...base, starts_at: new Date("2027-03-26T18:30:00Z"), ends_at: new Date("2027-03-27T18:29:00Z") });
+    expect(day).not.toContain("Ends");
+    const run = facts({ ...base, starts_at: new Date("2027-01-02T18:30:00Z"), ends_at: new Date("2027-01-05T18:29:00Z") });
+    expect(run).toContain("Ends: Tuesday, 5 January 2027");
+    expect(run).not.toContain("11:59");
+    const timed = facts({ ...base, start_time_known: true, starts_at: new Date("2027-01-03T13:30:00Z"), ends_at: new Date("2027-01-03T16:30:00Z") });
+    expect(timed).toContain("Ends: 10:00 PM");
+    expect(dropMissingFactSentences("Ger is on Saturday. No ticket price has been provided. The start time is yet to be announced. Entry is free."))
+      .toBe("Ger is on Saturday. Entry is free.");
+  });
+});

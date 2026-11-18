@@ -17,26 +17,45 @@ const SYSTEM = `You write short event descriptions for a city events guide in In
 
 Write ${ingestion.description.minWords} to ${ingestion.description.maxWords} words of plain, factual English prose in one paragraph, from the facts given and nothing else.
 - State what the event is, who is performing or hosting, when and where it is, and what it costs, in that rough order.
-- Use only the facts provided. Do not add background about the artists or venue, do not describe the atmosphere, and do not predict what the evening will be like. If a fact is not given (price, time, performers), leave it out; never say it is unknown.
+- Use only the facts provided. Do not add background about the artists or venue, do not describe the atmosphere, and do not predict what the evening will be like. If a fact is not given (price, time, end time, performers), leave it out without comment: never write that something is unknown, not provided, not given or not announced.
 - Write dates in full ("Saturday, 22 November 2026") and times as "8:00 PM". Mention the city.
 - Neutral tone: no hype, no exclamation marks, no second-person address, no calls to action.
 - If there are too few facts to reach the length honestly, write fewer words rather than padding.`;
 
-interface PendingEvent {
+export interface PendingEvent {
   id: number; title: string; starts_at: Date; ends_at: Date | null; start_time_known: boolean;
   price_text: string | null; is_free: boolean | null; has_booking: boolean;
   venue: string | null; area: string | null; city: string; timezone: string; category: string | null;
   performers: string[] | null; organisers: string[] | null;
 }
 
-function facts(e: PendingEvent): string {
+/**
+ * The end, as the source gave it. 11:59 PM is how a stated end date with no end time is stored:
+ * it is not a time anyone announced, so only the date is passed on (nothing, when it is the start day).
+ */
+function endLine(e: PendingEvent, day: (d: Date) => string, time: (d: Date) => string): string | null {
+  if (!e.ends_at) return null;
+  const sameDay = day(e.ends_at) === day(e.starts_at);
+  if (time(e.ends_at) === "11:59 PM") return sameDay ? null : `Ends: ${day(e.ends_at)}`;
+  return `Ends: ${sameDay ? time(e.ends_at) : `${day(e.ends_at)}, ${time(e.ends_at)}`}`;
+}
+
+/** Sentences that only say a fact is missing ("No ticket price has been provided."). */
+const MISSING = /\b(not (been )?(provided|given|announced|specified|stated|mentioned|listed|disclosed|shared)|(is|are) (unknown|unspecified|yet to be (announced|confirmed))|no (details|information) (on|about|regarding))\b|^\s*no\b[^.!?]*\b(has|have) been (provided|given|announced|specified|stated|mentioned|listed|shared)\b/i;
+
+/** Drops sentences that only report a missing fact; the writer is told not to write them, but sometimes does. */
+export function dropMissingFactSentences(text: string): string {
+  return (text.match(/[^.!?]+[.!?]*/g) ?? [text]).filter((s) => !MISSING.test(s)).join("").replace(/\s+/g, " ").trim();
+}
+
+export function facts(e: PendingEvent): string {
   const day = (d: Date) => new Intl.DateTimeFormat("en-GB", { timeZone: e.timezone, weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(d);
   const time = (d: Date) => new Intl.DateTimeFormat("en-US", { timeZone: e.timezone, hour: "numeric", minute: "2-digit" }).format(d);
   const lines = [
     `Event name: ${e.title}`,
     `Date: ${day(e.starts_at)}`,
     e.start_time_known ? `Start time: ${time(e.starts_at)}` : null,
-    e.ends_at ? `Ends: ${day(e.ends_at) === day(e.starts_at) ? time(e.ends_at) : `${day(e.ends_at)}, ${time(e.ends_at)}`}` : null,
+    endLine(e, day, time),
     `Venue: ${e.venue}`,
     e.area ? `Area: ${e.area}` : null,
     `City: ${e.city}`,
@@ -99,7 +118,7 @@ export async function writeDescriptions(
          WHERE id = (SELECT raw_post_id FROM sources WHERE event_id = $1 AND raw_post_id IS NOT NULL ORDER BY id LIMIT 1)`,
         [Number(r.id), r.usd]);
     }
-    const text = r.data?.description.trim().replace(/\s+/g, " ");
+    const text = r.data ? dropMissingFactSentences(r.data.description.trim().replace(/\s+/g, " ")) : undefined;
     // Tolerate a little drift either side of the target; anything further off is not published.
     const words = text ? wordCount(text) : 0;
     if (!r.ok || !text || words < 35 || words > ingestion.description.maxWords + 30) {
