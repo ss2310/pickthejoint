@@ -21,6 +21,7 @@ export function extractionSchema(categorySlugs: string[]) {
     end_time: field(z.string()),
     venue_name: field(z.string()),
     venue_instagram_handle: z.string().nullable(),
+    city: field(z.string()),
     area: field(z.string()),
     price_text: field(z.string()),
     is_free: field(z.boolean()),
@@ -74,6 +75,7 @@ Fields
 - start_time, end_time: HH:MM in 24-hour local time. "8 PM onwards" is 20:00 with no end time. Null if not stated.
 - venue_name: the place where it happens, as named. If the posting account is itself a venue and the post names no other place, the venue is that account's venue. A listing or promoter account is not a venue. If only a city or "TBA" is given, return null.
 - venue_instagram_handle: the venue's Instagram handle without @ if it is the posting account, is tagged, or is written in the post; otherwise null.
+- city: the city or town where the event takes place. Listing and promoter accounts post about many cities, so read this from the post: a city named on the poster or in the caption, or the city of the named venue. If the post names no city and the venue is the posting account's own venue, use the city given to you as the source's city. A locality or suburb of the source's city (see the known areas) counts as that city. If you cannot tell where it is, return null.
 - area: the locality within the city if stated or if it is one of the known areas listed; otherwise null.
 - price_text: the price as stated, short ("₹499 onwards", "Free entry", "Cover ₹1000, fully redeemable"). is_free: true only if the source says entry is free.
 - booking_url: a full URL that is written out. "Link in bio" is not a URL: return null.

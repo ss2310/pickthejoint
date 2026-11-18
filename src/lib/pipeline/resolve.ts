@@ -34,6 +34,8 @@ export interface PostContext {
 
 export interface ResolveCounts {
   created: number;
+  /** Events that take place in another city: not ours to list, and not worth a reviewer's time. */
+  outOfCity: number;
   merged: number;
   statusUpdates: number;
   queued: number;
@@ -64,6 +66,21 @@ export function gate(e: ExtractedEvent, ctx: Pick<PostContext, "postedAt" | "tim
     if (gap > 365) reasons.push("event date is more than a year after the post");
   }
   return reasons;
+}
+
+/**
+ * Where the event is, relative to the city the source belongs to. Listing and
+ * promoter accounts post about many cities, so the source's city is never
+ * assumed: the extraction has to say it.
+ */
+export function cityVerdict(e: ExtractedEvent, cityName: string, areas: string[] = []): "in" | "out" | "unknown" {
+  const stated = e.city?.value;
+  if (!stated || e.city.confidence < 0.6) return "unknown";
+  const key = nameKey(stated);
+  const words = key.split(" ");
+  if (words.includes(nameKey(cityName))) return "in";
+  // A suburb given as the city ("Mhow", "Rau") still belongs to the city.
+  return areas.some((a) => nameKey(a) === key) ? "in" : "out";
 }
 
 async function queueReview(db: Db, ctx: PostContext, reason: string, e: ExtractedEvent | null, extra: Record<string, unknown> = {}) {
@@ -262,8 +279,8 @@ async function createEvent(db: Db, ctx: PostContext, e: ExtractedEvent, venueId:
   const confidence = Math.min(e.title.confidence, e.start_date.confidence, e.venue_name.confidence, 1);
   const { rows } = await db.query<{ id: number }>(
     `INSERT INTO events (city_id, venue_id, category_id, slug, title, starts_at, ends_at, local_date, start_time_known,
-       price_text, is_free, booking_url, confidence, is_published, last_verified_at, origin)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,now(),'scraped') RETURNING id`,
+       price_text, is_free, booking_url, confidence, is_published, last_verified_at, origin, city_checked)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,now(),'scraped',true) RETURNING id`,
     [ctx.cityId, venueId, await categoryId(db, e), slug, title, t.startsAt, t.endsAt, t.date, t.timeKnown,
       optional(e.price_text), optional(e.is_free), httpUrl(optional(e.booking_url)), confidence],
   );
@@ -353,7 +370,7 @@ async function suggestHandles(db: Db, ctx: PostContext, ex: Extraction): Promise
 }
 
 export function emptyCounts(): ResolveCounts {
-  return { created: 0, merged: 0, statusUpdates: 0, queued: 0, suggestedHandles: 0, dedupModelUsd: 0 };
+  return { created: 0, outOfCity: 0, merged: 0, statusUpdates: 0, queued: 0, suggestedHandles: 0, dedupModelUsd: 0 };
 }
 
 export async function resolvePost(
@@ -362,6 +379,7 @@ export async function resolvePost(
   if (!ex.is_event_post || ex.events.length === 0) return "filtered_out";
   if (ctx.sourceKind === "instagram") counts.suggestedHandles += await suggestHandles(pool, ctx, ex);
 
+  const areaNames = (await pool.query<{ name: string }>("SELECT name FROM areas WHERE city_id = $1", [ctx.cityId])).rows.map((a) => a.name);
   let created = 0, merged = 0, queued = 0;
   for (const e of ex.events) {
     if (e.announcement !== "new_event") {
@@ -369,6 +387,9 @@ export async function resolvePost(
       else { await queueReview(pool, ctx, `${e.announcement} post for an event we could not match`, e); queued++; }
       continue;
     }
+    const where = cityVerdict(e, ctx.cityName, areaNames);
+    if (where === "out") { counts.outOfCity++; continue; }
+    if (where === "unknown") { await queueReview(pool, ctx, `could not tell whether the event is in ${ctx.cityName}`, e); queued++; continue; }
     const reasons = gate(e, ctx);
     if (reasons.length) { await queueReview(pool, ctx, reasons.join("; "), e); queued++; continue; }
 
@@ -393,5 +414,5 @@ export async function resolvePost(
   counts.created += created;
   counts.merged += merged;
   counts.queued += queued;
-  return created > 0 ? "published" : merged > 0 ? "merged" : "queued_review";
+  return created > 0 ? "published" : merged > 0 ? "merged" : queued > 0 ? "queued_review" : "filtered_out";
 }
