@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Breadcrumbs, EventList, ExternalLinks, JsonLd, SourceList } from "@/components/ui";
+import { EventList, ExternalLinks, Hero, JsonLd, SourceList } from "@/components/ui";
 import { plural, stamp } from "@/lib/format";
 import { getVenue, listEvents } from "@/lib/queries";
 import { ids, officialLinks, pageLd, venueLd, venuePath } from "@/lib/schema";
@@ -35,12 +35,14 @@ export default async function VenuePage({ params }: Props) {
 
   return (
     <main>
-      <Breadcrumbs trail={[{ name: v.city_name, path: `/${v.city_slug}` }, { name: v.name, path }]} />
-      <h1>{v.name}</h1>
+      <Hero trail={[{ name: v.city_name, path: `/${v.city_slug}` }, { name: v.name, path }]} title={v.name}
+        kicker={<p className="kicker"><span>{v.venue_type ? v.venue_type[0].toUpperCase() + v.venue_type.slice(1) : "Venue"}</span></p>}>
       <p className="lead">
         {v.name} is {v.venue_type ? `${/^[aeiou]/i.test(v.venue_type) ? "an" : "a"} ${v.venue_type}` : "a venue"} in {v.area_name ? `${v.area_name}, ` : ""}{v.city_name}, {v.city_state}.{" "}
         {upcoming.length ? `${plural(upcoming.length, "upcoming event")} ${upcoming.length === 1 ? "is" : "are"} listed here.` : "No upcoming events are listed here at the moment."}
       </p>
+      </Hero>
+      <div className="wrap page">
 
       <dl className="facts">
         {v.address && <div><dt>Address</dt><dd>{v.address}</dd></div>}
@@ -52,7 +54,7 @@ export default async function VenuePage({ params }: Props) {
         {v.capacity != null && <div><dt>Capacity</dt><dd>About {v.capacity.toLocaleString("en-IN")} people</dd></div>}
       </dl>
 
-      {v.description && <section aria-labelledby="about-heading"><h2 id="about-heading">About {v.name}</h2><p>{v.description}</p></section>}
+      {v.description && <section aria-labelledby="about-heading"><h2 id="about-heading">About {v.name}</h2><p className="about-text">{v.description}</p></section>}
 
       <section aria-labelledby="upcoming-heading">
         <h2 id="upcoming-heading">Upcoming events at {v.name}</h2>
@@ -71,6 +73,7 @@ export default async function VenuePage({ params }: Props) {
       <SourceList sources={v.sources} />
       <p className="muted small updated">Updated <time dateTime={modified.toISOString()}>{stamp(modified, v.timezone)}</time>.</p>
       <JsonLd data={[venueLd(v), pageLd(path, v.name, modified, ids.venue(v.city_slug, v.slug))]} />
+      </div>
     </main>
   );
 }

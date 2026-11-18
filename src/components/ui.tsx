@@ -1,6 +1,6 @@
 /** Shared server components. No client JavaScript anywhere: every page is complete in its HTML. */
 import Link from "next/link";
-import { clock, shortDate, stamp } from "@/lib/format";
+import { clock, dateParts, stamp } from "@/lib/format";
 import type { Faq } from "@/lib/hubs";
 import type { City, EventCard, Named } from "@/lib/queries";
 import { breadcrumbLd, eventPath, faqLd, type Ld } from "@/lib/schema";
@@ -31,6 +31,32 @@ export function Breadcrumbs({ trail }: { trail: Crumb[] }) {
   );
 }
 
+/**
+ * The band at the top of every page: breadcrumbs, an optional kicker, the page
+ * title and whatever introduces the page. `tone` is a category slug; it tints
+ * the band with that category's colour.
+ */
+export function Hero({ trail, title, tone, kicker, long, children }: {
+  trail: Crumb[]; title: string; tone?: string | null; kicker?: React.ReactNode; long?: boolean; children?: React.ReactNode;
+}) {
+  return (
+    <header className={["hero", tone ? `cat-${tone}` : "", long || title.length > 34 ? "hero-long" : ""].filter(Boolean).join(" ")}>
+      <div className="wrap">
+        <Breadcrumbs trail={trail} />
+        {kicker}
+        <h1>{title}</h1>
+        {children}
+      </div>
+    </header>
+  );
+}
+
+/** Up to two initials for a name: "The Yellow Diary" is "YD". */
+export function initials(name: string): string {
+  const words = name.replace(/^the\s+/i, "").split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  return (words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? name).slice(0, 2)).toUpperCase();
+}
+
 const STATUS_LABEL: Record<string, string> = { cancelled: "Cancelled", postponed: "Postponed" };
 
 export function priceLabel(e: Pick<EventCard, "is_free" | "price_text">): string | null {
@@ -38,24 +64,28 @@ export function priceLabel(e: Pick<EventCard, "is_free" | "price_text">): string
 }
 
 export function EventList({ events, empty }: { events: EventCard[]; empty: string }) {
-  if (events.length === 0) return <p className="muted">{empty}</p>;
+  if (events.length === 0) return empty ? <p className="empty">{empty}</p> : null;
   return (
     <ol className="events">
       {events.map((e) => {
         const price = priceLabel(e);
+        const d = dateParts(e.starts_at, e.timezone);
         return (
-          <li key={e.id} className={e.status === "cancelled" ? "event is-off" : "event"}>
+          <li key={e.id} className={["event", e.category_slug ? `cat-${e.category_slug}` : "", e.status === "cancelled" ? "is-off" : ""].filter(Boolean).join(" ")}>
+            {/* The spaces between the parts keep the date readable as plain text: "Sat 21 Nov". */}
             <time className="event-date" dateTime={e.starts_at.toISOString()}>
-              <span>{shortDate(e.starts_at, e.timezone)}</span>
-              {e.start_time_known && <span className="event-time">{clock(e.starts_at, e.timezone)}</span>}
+              <span className="dow">{d.weekday}</span>{" "}<span className="day">{d.day}</span>{" "}<span className="mon">{d.month}</span>
             </time>
             <div className="event-body">
               <h3><Link href={eventPath(e)}>{e.title}</Link></h3>
-              <p className="event-meta">
-                {STATUS_LABEL[e.status] && <strong className="tag tag-warn">{STATUS_LABEL[e.status]}</strong>}
+              <p className="event-venue">
+                {e.start_time_known && <><span className="event-time">{clock(e.starts_at, e.timezone)}</span>{e.venue_name ? " · " : ""}</>}
                 {e.venue_name && <span>{e.venue_name}{e.area_name ? `, ${e.area_name}` : ""}</span>}
-                {e.category_name && <span>{e.category_name}</span>}
-                {price && <span>{price}</span>}
+              </p>
+              <p className="event-tags">
+                {STATUS_LABEL[e.status] && <strong className="tag tag-warn">{STATUS_LABEL[e.status]}</strong>}
+                {e.category_name && <span className="pill">{e.category_name}</span>}
+                {price && <span className={e.is_free ? "pill pill-free" : "pill pill-plain"}>{price}</span>}
               </p>
             </div>
           </li>
@@ -86,16 +116,16 @@ export function FaqBlock({ faqs }: { faqs: Faq[] }) {
 /** Links between a city's hubs, shown on every hub page. */
 export function HubNav({ city, categories, current }: { city: City; categories: Named[]; current: string }) {
   const base = `/${city.slug}`;
-  const links = [
+  const links: { path: string; name: string; tone?: string }[] = [
     { path: base, name: "This week" }, { path: `${base}/today`, name: "Today" }, { path: `${base}/this-weekend`, name: "This weekend" },
-    ...categories.map((c) => ({ path: `${base}/${c.slug}`, name: c.name })),
+    ...categories.map((c) => ({ path: `${base}/${c.slug}`, name: c.name, tone: c.slug })),
     { path: `${base}/past`, name: "Past events" }, { path: `${base}/search`, name: "Search" },
   ];
   return (
     <nav aria-label={`${city.name} listings`} className="hubnav">
       <ul>
         {links.map((l) => (
-          <li key={l.path}>{l.path === current ? <span aria-current="page">{l.name}</span> : <Link href={l.path}>{l.name}</Link>}</li>
+          <li key={l.path} className={l.tone ? `cat-${l.tone}` : undefined}>{l.path === current ? <span aria-current="page">{l.name}</span> : <Link href={l.path}>{l.name}</Link>}</li>
         ))}
       </ul>
     </nav>

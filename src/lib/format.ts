@@ -13,6 +13,13 @@ export function shortDate(d: Date, timeZone: string): string {
   return fmt(timeZone, { weekday: "short", day: "numeric", month: "short" }, "en-GB").format(d).replace(",", "");
 }
 
+/** The pieces of a date tile: { weekday: "Sat", day: "21", month: "Nov" } */
+export function dateParts(d: Date, timeZone: string): { weekday: string; day: string; month: string } {
+  const parts = fmt(timeZone, { weekday: "short", day: "numeric", month: "short" }, "en-GB").formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return { weekday: get("weekday"), day: get("day"), month: get("month") };
+}
+
 /** "8:00 PM" */
 export function clock(d: Date, timeZone: string): string {
   return fmt(timeZone, { hour: "numeric", minute: "2-digit", hour12: true }, "en-US").format(d);

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Breadcrumbs, EventList, JsonLd, priceLabel } from "@/components/ui";
+import { EventList, Hero, JsonLd, priceLabel } from "@/components/ui";
 import { clock, longDate, stamp } from "@/lib/format";
 import { getEvent, listEvents, type EventDetail } from "@/lib/queries";
 import { abs, eventImagePath, eventLd, eventPath, ids, pageLd, venuePath } from "@/lib/schema";
@@ -75,18 +75,23 @@ export default async function EventPage({ params }: Props) {
   ];
 
   return (
-    <main>
-      <Breadcrumbs trail={trail} />
+    <main className={e.category_slug ? `cat-${e.category_slug}` : undefined}>
       <article className="event-page">
+        <Hero trail={trail} title={e.title} tone={e.category_slug} long
+          kicker={e.category_name && <p className="kicker"><Link href={`/${e.city_slug}/${e.category_slug}`}>{e.category_name}</Link></p>}>
+          <ul className="hero-facts">
+            <li><time dateTime={e.starts_at.toISOString()}>{whenText(e)}</time></li>
+            {e.venue_name && <li>{e.venue_name}{e.area_name ? `, ${e.area_name}` : ""}</li>}
+            {price && <li>{price}</li>}
+          </ul>
+        </Hero>
+        <div className="wrap page">
         {e.status === "cancelled" && <p className="banner banner-warn" role="status"><strong>Cancelled.</strong> The organiser has announced that this event will not take place.</p>}
         {e.status === "postponed" && <p className="banner banner-warn" role="status"><strong>Postponed.</strong> The organiser has postponed this event; the date below is the original one until a new date is announced.</p>}
         {over && <p className="banner" role="status">This event has taken place. It is kept here as part of the {e.city_name} archive.</p>}
 
-        <header>
-          {e.category_name && <p className="kicker"><Link href={`/${e.city_slug}/${e.category_slug}`}>{e.category_name}</Link></p>}
-          <h1>{e.title}</h1>
-        </header>
-
+        <div className="event-layout">
+        <div className="event-main">
         <dl className="facts">
           <div>
             <dt>When</dt>
@@ -119,17 +124,7 @@ export default async function EventPage({ params }: Props) {
           {e.series && <div><dt>Part of</dt><dd><Link href={`/series/${e.series.slug}`}>{e.series.name}</Link></dd></div>}
         </dl>
 
-        {e.booking_url && !over && e.status !== "cancelled" && (
-          <p><a className="button" href={e.booking_url} rel="noopener nofollow">Book on the official page</a>
-            <span className="block muted small">Pick the Joint does not sell tickets. This link goes to the organiser&apos;s booking page.</span></p>
-        )}
-
-        <p className="actions">
-          <a href={`${eventPath(e)}/calendar.ics`}>Add to calendar</a>
-          <a href={`https://wa.me/?text=${encodeURIComponent(`${e.title}, ${whenText(e)}${e.venue_name ? `, ${e.venue_name}` : ""}. ${abs(eventPath(e))}`)}`} rel="noopener nofollow">Share on WhatsApp</a>
-        </p>
-
-        {e.description && <section aria-labelledby="about-heading"><h2 id="about-heading">About this event</h2><p>{e.description}</p></section>}
+        {e.description && <section aria-labelledby="about-heading"><h2 id="about-heading">About this event</h2><p className="about-text">{e.description}</p></section>}
 
         <section aria-labelledby="source-heading" className="provenance">
           <h2 id="source-heading">Source</h2>
@@ -143,7 +138,26 @@ export default async function EventPage({ params }: Props) {
               {" "}Spotted a mistake? <Link href="/corrections">Tell us</Link>.</p>
           )}
         </section>
+        </div>
+
+        <aside className="event-side" aria-label="Booking and sharing">
+          <div className="ticket">
+            {price && <p className="price">{price}</p>}
+            {e.booking_url && !over && e.status !== "cancelled" && (
+              <p><a className="button" href={e.booking_url} rel="noopener nofollow">Book on the official page</a>
+                <span className="block muted small">Pick the Joint does not sell tickets. This link goes to the organiser&apos;s booking page.</span></p>
+            )}
+            <p className="actions">
+              <a href={`${eventPath(e)}/calendar.ics`}>Add to calendar</a>
+              <a href={`https://wa.me/?text=${encodeURIComponent(`${e.title}, ${whenText(e)}${e.venue_name ? `, ${e.venue_name}` : ""}. ${abs(eventPath(e))}`)}`} rel="noopener nofollow">Share on WhatsApp</a>
+            </p>
+          </div>
+        </aside>
+        </div>
+        </div>
       </article>
+
+      <div className="wrap">
 
       {atVenue.length > 0 && (
         <section aria-labelledby="venue-more"><h2 id="venue-more">More at {e.venue_name}</h2><EventList events={atVenue} empty="" /></section>
@@ -153,6 +167,7 @@ export default async function EventPage({ params }: Props) {
       )}
       <p className="muted small updated">Updated <time dateTime={e.updated_at.toISOString()}>{stamp(e.updated_at, e.timezone)}</time>.</p>
       <JsonLd data={[eventLd(e), pageLd(eventPath(e), e.title, e.updated_at, ids.event(eventPath(e)))]} />
+      </div>
     </main>
   );
 }
