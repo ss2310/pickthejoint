@@ -1,22 +1,29 @@
 import { admin } from "@/config";
-import { setupAllowed } from "@/lib/admin-auth";
+import { setupOpen } from "@/lib/admin-auth";
 import { setup } from "../auth-actions";
 
 export const metadata = { title: "Set the admin password" };
 
-export default async function SetupPage({ searchParams }: { searchParams: Promise<{ token?: string; error?: string }> }) {
-  const { token, error } = await searchParams;
-  const allowed = await setupAllowed(token);
+/**
+ * One-time setup. The token is pasted into the form (not carried in the
+ * address), so characters such as + & # in it cannot be mangled and it never
+ * lands in a log as part of a URL.
+ */
+export default async function SetupPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const { error } = await searchParams;
+  const open = await setupOpen();
   return (
     <section className="form-card narrow">
       <h1>Set the admin password</h1>
-      {!allowed.ok && <p className="banner banner-warn" role="alert">{allowed.reason}</p>}
-      {allowed.ok && (
+      {!open.ok && <p className="banner banner-warn" role="alert">{open.reason}</p>}
+      {open.ok && (
         <>
-          <p>Choose a long password ({admin.minPasswordLength} characters or more; a passphrase of four or five unrelated words works well). It is stored only as a scrypt hash. After this, remove <code>ADMIN_SETUP_TOKEN</code> from the web service.</p>
+          <p>Paste the value of <code>ADMIN_SETUP_TOKEN</code> from the web service, then choose a long password ({admin.minPasswordLength} characters or more; a passphrase of four or five unrelated words works well). It is stored only as a scrypt hash. Afterwards, delete <code>ADMIN_SETUP_TOKEN</code> from the web service.</p>
           {error && <p className="banner banner-warn" role="alert">{error}</p>}
           <form action={setup} className="form-grid">
-            <input type="hidden" name="token" value={token} />
+            <label className="field wide">Setup token
+              <input type="password" name="token" autoComplete="off" required />
+            </label>
             <label className="field wide">New password
               <input type="password" name="password" autoComplete="new-password" minLength={admin.minPasswordLength} required />
             </label>

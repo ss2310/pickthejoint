@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { accountExists } from "@/lib/admin-auth";
 import { isAdmin } from "@/lib/admin-session";
@@ -17,7 +18,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <section className="form-card narrow">
       <h1>Sign in</h1>
-      {!exists && <p className="banner banner-warn">No admin password has been set yet. Use the one-time setup link (see docs/HANDOFF.md).</p>}
+      {!exists && <p className="banner banner-warn">No admin password has been set yet. Set it once at <Link href="/admin/setup">/admin/setup</Link> with ADMIN_SETUP_TOKEN (see docs/HANDOFF.md).</p>}
       {error && <p className="banner banner-warn" role="alert">{ERRORS[error] ?? "Could not sign in."}</p>}
       <form action={login} className="form-grid">
         <label className="field wide">Password

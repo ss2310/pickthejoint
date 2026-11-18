@@ -58,11 +58,23 @@ export async function accountExists(pool: Pool = getPool()): Promise<boolean> {
   return (await pool.query("SELECT 1 FROM admin_account WHERE id = 1")).rowCount === 1;
 }
 
-/** Whether the setup page may be used with this token, and why not. */
-export async function setupAllowed(token: string | null | undefined, pool: Pool = getPool()): Promise<{ ok: boolean; reason?: string }> {
-  if (!admin.setupToken || admin.setupToken.length < 24) return { ok: false, reason: "Setup is closed. ADMIN_SETUP_TOKEN (at least 24 characters) is not set on the web service." };
-  if (!token || !sameSecret(token, admin.setupToken)) return { ok: false, reason: "The setup link is not valid." };
+/** A pasted token or variable value, without the spaces and quotes that copying tends to add. */
+export const cleanToken = (t: string | null | undefined) => (t ?? "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+
+/** Whether the setup page is open at all (before any token is checked), and why not. */
+export async function setupOpen(pool: Pool = getPool()): Promise<{ ok: boolean; reason?: string }> {
+  if (cleanToken(admin.setupToken).length < 24) return { ok: false, reason: "Setup is closed. ADMIN_SETUP_TOKEN (at least 24 characters) is not set on the web service." };
   if ((await accountExists(pool)) && !admin.allowReset) return { ok: false, reason: "The admin password is already set. Setup is locked." };
+  return { ok: true };
+}
+
+/** Whether setup may go ahead with this token, and why not. */
+export async function setupAllowed(token: string | null | undefined, pool: Pool = getPool()): Promise<{ ok: boolean; reason?: string }> {
+  const open = await setupOpen(pool);
+  if (!open.ok) return open;
+  if (!cleanToken(token) || !sameSecret(cleanToken(token), cleanToken(admin.setupToken))) {
+    return { ok: false, reason: "That setup token does not match ADMIN_SETUP_TOKEN on the web service." };
+  }
   return { ok: true };
 }
 

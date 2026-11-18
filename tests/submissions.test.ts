@@ -15,7 +15,7 @@ import { freshDb } from "./helpers";
 import { seed } from "../db/seed";
 import { closePool } from "../src/lib/db";
 import {
-  checkLogin, createSession, endSession, hashPassword, passwordProblem, sessionValid, setPassword, setupAllowed, verifyPassword,
+  checkLogin, cleanToken, createSession, endSession, hashPassword, passwordProblem, sessionValid, setPassword, setupAllowed, verifyPassword,
 } from "../src/lib/admin-auth";
 import { handleInbound, verifyWebhook } from "../src/lib/inbound-email";
 import type { LlmClient, LlmRequest, LlmResult, LlmRunOptions } from "../src/lib/pipeline/llm";
@@ -333,7 +333,11 @@ describe("admin login", () => {
 
   it("opens setup only with the token and only once, and runs sessions", async () => {
     expect((await setupAllowed("wrong", pool)).ok).toBe(false);
+    expect((await setupAllowed("", pool)).ok).toBe(false);
     expect((await setupAllowed("setup-token-for-tests-0123456789", pool)).ok).toBe(true);
+    // Spaces and quotes picked up when copying the value are ignored.
+    expect((await setupAllowed('  "setup-token-for-tests-0123456789"\n', pool)).ok).toBe(true);
+    expect(cleanToken("'abc'")).toBe("abc");
     await setPassword("lantern velvet orbit mango", pool);
     expect(await setupAllowed("setup-token-for-tests-0123456789", pool)).toEqual({ ok: false, reason: "The admin password is already set. Setup is locked." });
     expect(await checkLogin("lantern velvet orbit mango", pool)).toBe(true);
