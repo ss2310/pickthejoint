@@ -1,6 +1,6 @@
 # Handoff: where the build stands
 
-Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 3b, and updated the same day after Prompts 4 and 5 and a redesign. Read this with `CLAUDE.md` (project rules) and `README.md` (commands and layout). The owner works prompt by prompt from a numbered prompt file (Prompts 1 to 15). **The text of every prompt not yet built is in `docs/build-prompts.md`**, so there is no need to ask for it. Each prompt ends with checks that must be run and shown before moving on.
+Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 3b, and updated the same day after Prompts 4 and 5, a redesign, and Prompt 6. Read this with `CLAUDE.md` (project rules) and `README.md` (commands and layout). The owner works prompt by prompt from a numbered prompt file (Prompts 1 to 15). **The text of every prompt not yet built is in `docs/build-prompts.md`**, so there is no need to ask for it. Each prompt ends with checks that must be run and shown before moving on.
 
 **Working rule from the owner (18 Nov):** at most two prompts per session. After the second prompt's checks, update this file and start a new session for the next prompt.
 
@@ -15,10 +15,11 @@ Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 
 | 4 Entity enrichment | Live. First production run on 18 Nov: see "Prompt 4 check results" below |
 | Redesign (owner's request, not a numbered prompt) | Live. Colourful hero band, a colour per category, card listings, self-hosted fonts |
 | 5 Hindi | Live under `/hi/`. Backfill run on 18 Nov: see "Prompt 5 check results" below |
-| 6 Submissions and admin area | **Next** |
-| 7 to 15 | Not started. Text in `docs/build-prompts.md` |
+| 6 Submissions and admin area | Live. Checks run on 18 Nov: see "Prompt 6 check results" below. Poster email built but waits on the owner's Resend setup |
+| 7 Natural-language search | **Next** |
+| 8 to 15 | Not started. Text in `docs/build-prompts.md` |
 
-Production currently shows 13 Indore events.
+Production showed 13 Indore events before Prompt 6; one approved submission has been added since.
 
 ## Production setup (Railway project "melodious-love")
 
@@ -39,6 +40,10 @@ Production currently shows 13 Indore events.
 
 **Do not read Railway variable values** (they include API keys). Variable names are safe to list.
 
+**The admin area** is at `https://pickthejoint.com/admin` (one account, the owner's). Since Prompt 6 the review queue, suggested handles, spend and job reports can be read there instead of in the database or job logs: ask the owner to sign in in the app's built-in browser pane and drive it there. The password was set on 18 Nov through `/admin/setup` with `ADMIN_SETUP_TOKEN`; to replace it, set `ADMIN_SETUP_TOKEN` again plus `ADMIN_RESET=on` on `web`, use the setup page, then delete both.
+
+**Cloudflare Turnstile and the browsers:** the check never passes in the app's built-in browser (it keeps asking for a tick that does not take). In the owner's own Chrome (Claude in Chrome) it usually passes on its own and sometimes needs the owner to tick it; Claude must not tick it. Public form checks therefore run in Chrome, and admin work in the built-in pane where the owner is signed in.
+
 ## This machine
 
 - Repo: `C:\Users\Utsav Goyal\Documents\Pick The Joint` (`ss2310/pickthejoint`).
@@ -46,6 +51,8 @@ Production currently shows 13 Indore events.
 - `.env.local` (git-ignored) holds real keys for local paid runs. Run jobs locally with `npx tsx --env-file=.env.local scripts/jobs/ingest.ts ...` and set `DATABASE_URL` in the shell first, because the file's own `DATABASE_URL` is not usable locally.
 - `npm run db:dev-seed` loads made-up demo listings into a local database for page work.
 - Shell heredocs mangle backslashes and can break on quotes and backticks on this machine. Write files with the editor tools, or put edit scripts in a file and run them.
+- Model calls fail locally unless `ANTHROPIC_API_KEY` is set; the submission code is built to carry on without them (the submission still reaches the queue, a poster that cannot be read leaves the form for the sender to fill in), which is also how a local run of the admin area behaves.
+- When a command chains tests and a merge, gate the merge on the test command's exit code, not on grepping its summary: on 18 Nov a run with 4 failed tests (a one-off under machine load; three later runs passed) went on to merge PR #21.
 
 ## Decisions the owner has made
 
@@ -60,6 +67,7 @@ Production currently shows 13 Indore events.
 - **Email service:** Resend.
 - **Old site URLs:** none to redirect. Sitemaps are already submitted to Bing and Google.
 - **Hindi (Prompt 5):** English at plain paths, Hindi under `/hi/`. Translation by the mid-tier model into the `translations` table when text is created or changed, never on page load. Monthly limit $5 (`TRANSLATION_BUDGET_USD`) inside the model budget. The about, how-we-verify, corrections and changelog pages are English only for now; their `/hi/` addresses redirect.
+- **Submissions (Prompt 6), decided 18 Nov:** poster photos are stored privately in Postgres (`poster_images`, as cleaned JPEG bytes; no new service) and deleted the day after the event, or within 2 to 7 days when unused. The owner wants the poster email address through Resend inbound (built; waits on setup, below). The admin password is set by the owner on `/admin/setup` with a token from a Railway variable, never in chat. Public poster reading and screening have their own monthly limit, `SUBMISSIONS_BUDGET_USD` (default $3), inside the model budget. `sharp` became a direct dependency (it was already installed through Next.js; no account).
 - **Enrichment (Prompt 4):** facts come from the entity's own Instagram bio (Apify) and from the mid-tier model with Anthropic's web search and web fetch tools. Monthly limit $20 inside the model budget, a quarter of it per weekly run. The owner approved the new `enrich` Railway service.
 
 ## Things learned the hard way
@@ -86,11 +94,16 @@ Production currently shows 13 Indore events.
 - Resend key and sending address (above).
 - `SITE_PROFILES`: URLs of Pick the Joint's own Instagram, YouTube, X and Facebook profiles, for `sameAs`.
 - Who runs the site (name or company) for the about page, and whose name to use as editor on roundups and guides.
-- Approval of the draft privacy policy and terms in `docs/legal/` before they are published.
+- Approval of the draft privacy policy and terms in `docs/legal/` before they are published. They should now mention submissions: the submitter's name and contact are kept privately, and poster photos are stored privately and deleted after the event.
+- **Poster email (Prompt 6):** in Resend, turn on receiving (the ready-made `…resend.app` address works without DNS, or add the MX record for a subdomain such as `posters.pickthejoint.com`), create a webhook for `email.received` pointing at `https://pickthejoint.com/api/inbound/poster-email`, and set on `web`: `RESEND_INBOUND_WEBHOOK_SECRET` (the webhook's signing secret), `RESEND_API_KEY`, and optionally `POSTER_EMAIL_SENDERS` (default: `CONTACT_EMAIL` only). Then forward one poster to test it.
+- **Who sent it:** an approved form submission always shows "Submitted by the organiser", but the form does not ask whether the sender is the organiser (the live check event was sent by us). Decide whether to add an "I am the organiser" box, with "Submitted by a reader" otherwise.
+- **Delete `ADMIN_SETUP_TOKEN`** from `web` if it is still there (the setup page is locked once a password exists, but the variable is no longer needed).
 
 ## Not built yet that later prompts assume
 
-- No admin area. 19 review-queue items and about 108 suggested handles are waiting, visible only in the database (Prompt 6). Enrichment adds `entity_fact` items (unsure facts, identities it could not confirm, text it could not write).
+- The admin area (Prompt 6) shows `entity_fact` items from enrichment, but approving one only marks it reviewed: nothing yet writes an approved fact onto the page or re-runs the entity. Geocoder matches, queued posts, events and submissions are fully handled from the queue.
+- Approved submissions are translated into Hindi by the next `ingest` run (06:00 IST); until then their Hindi page shows the English text.
+- Cancelling or taking down an event in the admin area rebuilds the site's own pages at once, but does not purge Cloudflare's cache or ping IndexNow.
 - Enrichment is tried once per entity. Nothing yet re-flags an entity for a fresh look (for example after a year, or when it gains more events); set `needs_enrichment = true` or use `--slugs`.
 - Enriched text is English only; Hindi comes with the translation prompt.
 - No read access to the production database from this machine. Checks so far used job reports in Railway logs and the public site.
@@ -124,8 +137,22 @@ Per entity the cost ranged from $0.09 to $0.27: research with web search is abou
 - **Times** show as "8:00 pm" on Hindi pages (the platform's Hindi formatting); acceptable, but could become "रात 8:00 बजे" later.
 - **Unplanned spend on 18 Nov:** a Railway `redeploy` reused the old start command and ran a full enrichment for 8 entities ($1.21). See "To run a job once" above for the safe way.
 
-## Next: Prompt 6
+## Prompt 6 check results (18 Nov, live site)
 
-**Started on 18 Nov in a separate session ("Prompt 6: submissions and admin area"), working on branch `prompt-6-admin` in its own worktree.** Check its pull request before starting anything else.
+Built in PR #19, with follow-ups #20 (setup page takes the token in a field: a token in the address did not survive), #21 (prefilled category and free box were lost after the redirect) and #22 (logs Cloudflare's reason when Turnstile refuses). See the README section "Submissions and the admin area" for how it works.
 
-The text is in `docs/build-prompts.md`. It needs, before building: a Cloudflare Turnstile site key and secret (the owner created them in Section B setup; check the variable names on `web`), and a decision on where submitted poster images are stored privately (Railway has no object storage in this project yet; ask the owner before adding a paid service). Prompt 6 is the first to add an admin login, which later prompts (7 to 15) all build on.
+- **Real submission:** "AIR 1 - A Standup Comedy Show by Harshit Mahawar", Coffeenism, Vijay Nagar, 5 Dec 2026 7:30 to 9:00 PM, ₹499 onwards. Every fact was taken from the show's own District page (https://www.district.in/events/air-1-a-standup-comedy-show-by-harshit-mahawar-dec5-2026-buy-tickets), checked 18 Nov. Screening: complete, date plausible, no duplicate, model (fast tier) "not spam, plausible" (0.85). Not on any public page, sitemap or feed before approval (its address returned 404).
+- **Spam-like submission** (sent from the Hindi form): flagged "likely spam" by the rules (spam word, link shortener, two links, title in capitals) and by the model (0.98). Never public; rejected.
+- **Approval:** one click in `/admin/queue` published `/indore/events/air-1-a-standup-comedy-show-by-harshit-mahawar-2026-12-05` with origin `submitted`, source line "Submitted by the organiser", a written description, and new venue (Coffeenism), artist and organiser pages. Its structured data is a `ComedyEvent` with `startDate` 2026-12-05T19:30+05:30, `endDate` 21:00, the venue's address, performer and organiser, and an `Offer` of ₹499 INR linking to District. The submitter's name and contact appear nowhere on the page. The event stays listed (it is real).
+- **Poster photos** (made for the check, uploaded through "snap a poster" in Chrome):
+  1. *Clear* ("Shaam-e-Ghazal", a made-up evening at Preetamlal Dua Sabhagrah): every fact read at 0.90 to 0.97: title, 5 Dec 2026, 19:00, venue, Race Course Road, Indore, Meera Saxena, Indore Ghazal Circle, "Entry free", music. After PR #21 the prefilled form shows all of them.
+  2. *Blurry* (tilted, dim, heavily blurred "Jazz at the Lake"): title read (0.95); date 13 Dec (0.75), time 18:30 (0.50) and venue "Lakeside Lawn" (0.60) filled in but listed for the sender to check; performers, price and area left empty. The model's note: the poster is very blurry and those lines are unreadable.
+  3. *Not an event* (a cafe menu): "We could not find event details"; the photo was deleted at once.
+  The drafts from 1 and 2 were never sent; housekeeping deletes them and their photos after 2 days. Nothing was approved from them.
+- **Not checked live:** the admin poster inbox (multi-upload) and the poster email (waits on Resend setup). Both share the poster reader that was checked above and are covered by tests with stand-ins.
+- **Cost of the checks:** a few cents of model spend (screening at the fast tier, poster reading and one description at the mid tier), shown on the admin overview under "inside model: public submissions" and job `admin`.
+- **Turnstile in practice:** see "Cloudflare Turnstile and the browsers" above. Two poster uploads were refused although the widget showed success; PR #22 logs the reason, so check `web`'s logs for `[turnstile]` if visitors report it.
+
+## Next: Prompt 7
+
+Natural-language search. The text is in `docs/build-prompts.md`. It adds an admin view of common and zero-result queries, which belongs in the admin area built in Prompt 6 (`src/app/admin/`, reuse its components and `requireAdmin`). The `search_log` table already exists (Prompt 1). The fast tier parses queries; it needs its own daily spend limit through the budget guard (add a sub-budget in `src/config/index.ts`, as `submissions` was added).
