@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { Breadcrumbs, EventList } from "@/components/ui";
+import { EventList, Hero } from "@/components/ui";
 import { isoDay, longDay, plural } from "@/lib/format";
 import { getCity, listAreas, listCategories, listEvents } from "@/lib/queries";
 
@@ -51,8 +51,8 @@ export default async function SearchPage({ params, searchParams }: Props) {
 
   return (
     <main>
-      <Breadcrumbs trail={[{ name: city.name, path: `/${city.slug}` }, { name: "Search", path: `/${city.slug}/search` }]} />
-      <h1>Search events in {city.name}</h1>
+      <Hero trail={[{ name: city.name, path: `/${city.slug}` }, { name: "Search", path: `/${city.slug}/search` }]} title={`Search events in ${city.name}`} />
+      <div className="wrap page">
       <form method="get" action={`/${city.slug}/search`} className="filters">
         <label>From <input type="date" name="from" defaultValue={from} /></label>
         <label>Until <input type="date" name="to" defaultValue={to} /></label>
@@ -83,6 +83,7 @@ export default async function SearchPage({ params, searchParams }: Props) {
         {applied.length ? `: ${applied.join(", ")}.` : `: everything coming up in ${city.name}.`}
       </p>
       <EventList events={events} empty="No listed events match these filters. Try a wider date range or fewer filters." />
+      </div>
     </main>
   );
 }

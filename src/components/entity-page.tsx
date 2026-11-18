@@ -4,7 +4,7 @@ import { displayTimeZone } from "@/config";
 import { plural, stamp } from "@/lib/format";
 import { listEvents, type EventCard, type PersonDetail } from "@/lib/queries";
 import { ids, officialLinks, pageLd, type Ld } from "@/lib/schema";
-import { Breadcrumbs, EventList, ExternalLinks, JsonLd, SourceList } from "./ui";
+import { EventList, ExternalLinks, Hero, JsonLd, SourceList, initials } from "./ui";
 
 export interface EntityKind {
   /** "artists" | "organisers" */
@@ -47,11 +47,13 @@ export async function EntityPage({ kind, p }: { kind: EntityKind; p: PersonDetai
 
   return (
     <main>
-      <Breadcrumbs trail={[{ name: kind.label, path: `/${kind.base}/${p.slug}` }]} />
-      <h1>{p.name}</h1>
-      <p className="lead">
-        {p.bio ?? `${p.name} ${kind.base === "artists" ? "has appeared at" : "has organised"} ${plural(upcoming.length + past.length, "event")} listed on Pick the Joint${descriptor ? ` (${descriptor})` : ""}. A fuller profile will be added once it can be sourced.`}
-      </p>
+      <Hero trail={[{ name: kind.label, path: `/${kind.base}/${p.slug}` }]} title={p.name}
+        kicker={<span className="avatar" aria-hidden="true">{initials(p.name)}</span>}>
+        <p className="lead">
+          {p.bio ?? `${p.name} ${kind.base === "artists" ? "has appeared at" : "has organised"} ${plural(upcoming.length + past.length, "event")} listed on Pick the Joint${descriptor ? ` (${descriptor})` : ""}. A fuller profile will be added once it can be sourced.`}
+        </p>
+      </Hero>
+      <div className="wrap page">
       {(p.genre || p.hometown) && (
         <dl className="facts">
           {p.genre && <div><dt>Genre or form</dt><dd>{p.genre}</dd></div>}
@@ -86,6 +88,7 @@ export async function EntityPage({ kind, p }: { kind: EntityKind; p: PersonDetai
         {" "}Only professional, public facts are listed here.
       </p>
       <JsonLd data={[kind.ld(p), pageLd(`/${kind.base}/${p.slug}`, p.name, modified, kind.base === "artists" ? ids.artist(p.slug) : ids.organiser(p.slug))]} />
+      </div>
     </main>
   );
 }

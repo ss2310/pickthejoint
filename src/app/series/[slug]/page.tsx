@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { Breadcrumbs, EventList, ExternalLinks, JsonLd } from "@/components/ui";
+import { EventList, ExternalLinks, Hero, JsonLd } from "@/components/ui";
 import { displayTimeZone } from "@/config";
 import { plural, stamp } from "@/lib/format";
 import { getSeries, listEvents } from "@/lib/queries";
@@ -26,13 +26,15 @@ export default async function SeriesPage({ params }: Props) {
   const modified = [...upcoming, ...past].reduce((max, e) => (e.updated_at > max ? e.updated_at : max), s.updated_at);
   return (
     <main>
-      <Breadcrumbs trail={[{ name: s.name, path: `/series/${s.slug}` }]} />
-      <h1>{s.name}</h1>
+      <Hero trail={[{ name: s.name, path: `/series/${s.slug}` }]} title={s.name} tone="festivals"
+        kicker={<p className="kicker"><span>Recurring event</span></p>}>
       <p className="lead">
         {s.description ?? `${s.name} is a recurring event.`}{" "}
         {s.recurrence ? `It takes place ${s.recurrence}. ` : ""}
         {upcoming.length ? `${plural(upcoming.length, "upcoming event")} ${upcoming.length === 1 ? "is" : "are"} listed.` : "Dates for the next edition have not been announced yet."}
       </p>
+      </Hero>
+      <div className="wrap page">
       <section aria-labelledby="upcoming-heading">
         <h2 id="upcoming-heading">Upcoming</h2>
         <EventList events={upcoming} empty="No upcoming dates are listed yet." />
@@ -41,6 +43,7 @@ export default async function SeriesPage({ params }: Props) {
       {links.length > 0 && <section aria-labelledby="links-heading"><h2 id="links-heading">Official links</h2><ExternalLinks links={links} /></section>}
       <p className="muted small updated">Updated <time dateTime={modified.toISOString()}>{stamp(modified, displayTimeZone)}</time>.</p>
       <JsonLd data={[seriesLd(s), pageLd(`/series/${s.slug}`, s.name, modified, ids.series(s.slug))]} />
+      </div>
     </main>
   );
 }

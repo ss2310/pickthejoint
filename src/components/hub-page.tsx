@@ -4,7 +4,7 @@ import Link from "next/link";
 import { hubFaqs, hubSummary, type Hub } from "@/lib/hubs";
 import { areasWithEvents, cityLastChange, listCategories, listEvents, type City } from "@/lib/queries";
 import { itemListLd, pageLd } from "@/lib/schema";
-import { Breadcrumbs, EventList, FaqBlock, HubNav, JsonLd, Updated, type Crumb } from "./ui";
+import { EventList, FaqBlock, Hero, HubNav, JsonLd, Updated, type Crumb } from "./ui";
 
 export async function hubMetadata(hub: Hub): Promise<Metadata> {
   // An empty category or area page has nothing to offer a searcher yet.
@@ -27,9 +27,10 @@ export async function HubPage({ city, hub }: { city: City; hub: Hub }) {
 
   return (
     <main>
-      <Breadcrumbs trail={trail} />
-      <h1>{hub.heading}</h1>
-      <p className="lead">{hubSummary(hub, city, events, next)}</p>
+      <Hero trail={trail} title={hub.heading} tone={hub.kind === "category" ? hub.path.split("/").pop() : null}>
+        <p className="lead">{hubSummary(hub, city, events, next)}</p>
+      </Hero>
+      <div className="wrap page">
       <HubNav city={city} categories={categories} current={hub.path} />
 
       <section aria-labelledby="list-heading">
@@ -57,6 +58,7 @@ export async function HubPage({ city, hub }: { city: City; hub: Hub }) {
       <Updated at={lastChange} timeZone={city.timezone} />
       {events.length > 0 && <JsonLd data={itemListLd(hub.heading, events)} />}
       <JsonLd data={pageLd(hub.path, hub.heading, lastChange)} />
+      </div>
     </main>
   );
 }
