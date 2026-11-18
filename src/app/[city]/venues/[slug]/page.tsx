@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Breadcrumbs, EventList, ExternalLinks, JsonLd } from "@/components/ui";
 import { plural, stamp } from "@/lib/format";
 import { getVenue, listEvents } from "@/lib/queries";
-import { officialLinks, venueLd, venuePath } from "@/lib/schema";
+import { ids, officialLinks, pageLd, venueLd, venuePath } from "@/lib/schema";
 
 export const revalidate = 600;
 
@@ -29,6 +29,8 @@ export default async function VenuePage({ params }: Props) {
     listEvents({ venueId: v.id, when: "past", limit: 50 }),
   ]);
   const path = venuePath(v.city_slug, v.slug);
+  // The page changes when the venue's details or any of its listings change.
+  const modified = [...upcoming, ...past].reduce((max, e) => (e.updated_at > max ? e.updated_at : max), v.updated_at);
   const mapQuery = v.lat != null && v.lng != null ? `${v.lat},${v.lng}` : [v.name, v.address, v.city_name].filter(Boolean).join(", ");
 
   return (
@@ -65,8 +67,8 @@ export default async function VenuePage({ params }: Props) {
       {officialLinks(v.official_links, v.same_as).length > 0 && (
         <section aria-labelledby="links-heading"><h2 id="links-heading">Official links</h2><ExternalLinks links={officialLinks(v.official_links, v.same_as)} /></section>
       )}
-      <p className="muted small">Venue details last changed <time dateTime={v.updated_at.toISOString()}>{stamp(v.updated_at, v.timezone)}</time>.</p>
-      <JsonLd data={venueLd(v)} />
+      <p className="muted small updated">Updated <time dateTime={modified.toISOString()}>{stamp(modified, v.timezone)}</time>.</p>
+      <JsonLd data={[venueLd(v), pageLd(path, v.name, modified, ids.venue(v.city_slug, v.slug))]} />
     </main>
   );
 }

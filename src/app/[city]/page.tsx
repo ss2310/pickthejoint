@@ -1,10 +1,8 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { HubPage, hubMetadata } from "@/components/hub-page";
-import { JsonLd } from "@/components/ui";
 import { resolveHub } from "@/lib/hubs";
 import { getCity, listCategories } from "@/lib/queries";
-import { siteLd } from "@/lib/schema";
 
 // City home. Rebuilt at most every 10 minutes, so new listings and the day rolling over show up without a deploy.
 export const revalidate = 600;
@@ -25,10 +23,5 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function CityHome({ params }: Props) {
   const found = await load(params);
   if (!found) notFound();
-  return (
-    <>
-      <HubPage city={found.city} hub={found.hub} />
-      <JsonLd data={siteLd()} />
-    </>
-  );
+  return <HubPage city={found.city} hub={found.hub} />;
 }

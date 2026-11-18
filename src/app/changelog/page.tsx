@@ -6,7 +6,7 @@ export const metadata = pageMeta("Changelog", "A dated record of notable changes
 
 export default function Changelog() {
   return (
-    <Editorial title="Changelog" path="/changelog">
+    <Editorial title="Changelog" path="/changelog" updated={changelog[0].date}>
       <p className="lead">A dated record of notable changes to the site, newest first.</p>
       {changelog.map((c) => (
         <section key={`${c.date}-${c.title}`}>

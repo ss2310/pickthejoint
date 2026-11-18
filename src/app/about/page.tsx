@@ -10,7 +10,7 @@ export const metadata = pageMeta("About Pick the Joint",
 export default async function About() {
   const cities = await liveCities();
   return (
-    <Editorial title="About Pick the Joint" path="/about">
+    <Editorial title="About Pick the Joint" path="/about" updated="2026-11-18">
       <p className="lead">
         Pick the Joint is an independent guide to what is on in Indian cities: concerts, comedy, theatre, workshops, college and
         community events, festivals and more. It does not sell tickets, and it does not currently take payment for listings.

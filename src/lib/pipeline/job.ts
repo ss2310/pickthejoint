@@ -3,6 +3,7 @@
  * job_runs (with its report) and prints the report.
  */
 import type { Pool } from "pg";
+import { sendAlert } from "../alerts";
 import { closePool, getPool } from "../db";
 import { BudgetExceededError, monthSpend } from "../budget-guard";
 import { budgets, subBudgetParent, type BudgetBucket, type SubBudget } from "../../config";
@@ -22,6 +23,10 @@ export interface JobArgs {
   sources: string[];
   /** Skip fetching; only process posts already stored. */
   processOnly: boolean;
+  /** Housekeeping: run the crawl access check now instead of waiting for Monday. */
+  crawlCheck: boolean;
+  /** Fail on purpose, to prove the failure alert arrives. */
+  failOnPurpose: boolean;
 }
 
 export function parseArgs(argv: string[]): JobArgs {
@@ -42,7 +47,14 @@ export function parseArgs(argv: string[]): JobArgs {
     limit: limit ? Number(limit) : undefined,
     sources: list("sources") ?? ["instagram", "google", "news"],
     processOnly: argv.includes("--process-only"),
+    crawlCheck: argv.includes("--crawl-check"),
+    failOnPurpose: argv.includes("--fail-on-purpose") || process.env.FAIL_ON_PURPOSE === jobNameFromArgv(),
   };
+}
+
+/** FAIL_ON_PURPOSE=<job name> on a service makes that job's next run fail, without changing its start command. */
+function jobNameFromArgv(): string {
+  return (process.argv[1] ?? "").replace(/\\/g, "/").split("/").pop()?.replace(/\.ts$/, "") ?? "";
 }
 
 export type Report = Record<string, unknown>;
@@ -97,13 +109,19 @@ export async function runJob(
 /** Entry point for scripts/jobs/*: run, print the report, exit non-zero on failure. */
 export function main(jobName: string, body: (pool: Pool, report: Report, args: JobArgs) => Promise<void>): void {
   const args = parseArgs(process.argv.slice(2));
-  runJob(jobName, args.dryRun, (pool, report) => body(pool, report, args))
+  runJob(jobName, args.dryRun, (pool, report) => {
+    if (args.failOnPurpose) throw new Error("Failed on purpose to test the job alert (FAIL_ON_PURPOSE or --fail-on-purpose).");
+    return body(pool, report, args);
+  })
     .then((report) => {
       console.log(JSON.stringify(report, null, 2));
       return closePool();
     })
     .catch(async (err) => {
       console.error(err);
+      if (!args.dryRun) {
+        await sendAlert(`The ${jobName} job failed`, `The scheduled ${jobName} job stopped with an error and did not finish.\n\n${(err as Error).stack ?? String(err)}`);
+      }
       await closePool().catch(() => {});
       process.exit(1);
     });

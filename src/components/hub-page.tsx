@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { hubFaqs, hubSummary, type Hub } from "@/lib/hubs";
 import { areasWithEvents, cityLastChange, listCategories, listEvents, type City } from "@/lib/queries";
-import { itemListLd } from "@/lib/schema";
+import { itemListLd, pageLd } from "@/lib/schema";
 import { Breadcrumbs, EventList, FaqBlock, HubNav, JsonLd, Updated, type Crumb } from "./ui";
 
 export async function hubMetadata(hub: Hub): Promise<Metadata> {
@@ -36,7 +36,11 @@ export async function HubPage({ city, hub }: { city: City; hub: Hub }) {
         <h2 id="list-heading">{hub.kind === "past" ? "Past events" : hub.kind === "home" ? "On this week" : "Listings"}</h2>
         <EventList events={events} empty="Nothing is listed here yet." />
         {hub.kind === "home" && (
-          <p><Link href={`/${city.slug}/search`}>See everything coming up in {city.name}</Link></p>
+          <p className="actions">
+            <Link href={`/${city.slug}/search`}>See everything coming up in {city.name}</Link>
+            <a href={`/${city.slug}/feed.ics`}>Calendar feed (ICS)</a>
+            <a href={`/${city.slug}/feed.json`}>JSON feed</a>
+          </p>
         )}
       </section>
 
@@ -52,6 +56,7 @@ export async function HubPage({ city, hub }: { city: City; hub: Hub }) {
       <FaqBlock faqs={hubFaqs(hub, city, events)} />
       <Updated at={lastChange} timeZone={city.timezone} />
       {events.length > 0 && <JsonLd data={itemListLd(hub.heading, events)} />}
+      <JsonLd data={pageLd(hub.path, hub.heading, lastChange)} />
     </main>
   );
 }

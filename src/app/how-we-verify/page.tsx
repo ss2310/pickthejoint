@@ -6,7 +6,7 @@ export const metadata = pageMeta("How we collect and verify events",
 
 export default function HowWeVerify() {
   return (
-    <Editorial title="How we collect and verify events" path="/how-we-verify">
+    <Editorial title="How we collect and verify events" path="/how-we-verify" updated="2026-11-18">
       <p className="lead">
         Every listing on Pick the Joint comes from a named public source, and an event is published only when its title, date and
         venue could be established with confidence. Anything uncertain is held for a person to review instead.
@@ -38,6 +38,8 @@ export default function HowWeVerify() {
         <li>We do not copy posters, photos or captions. We link to the original post.</li>
         <li>Pages about people list professional, public facts only.</li>
       </ul>
+      <h2>Maps</h2>
+      <p>Venue coordinates come from OpenStreetMap and are &copy; OpenStreetMap contributors, available under the Open Database Licence. Uncertain matches are checked by a person before they are shown.</p>
       <p>Found a mistake? See <Link href="/corrections">corrections and takedown</Link>.</p>
     </Editorial>
   );

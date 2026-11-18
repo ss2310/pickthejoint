@@ -187,4 +187,25 @@ export const site = {
   url: (process.env.SITE_URL ?? "https://pickthejoint.com").replace(/\/+$/, ""),
   /** Address for corrections and takedown requests, shown on the corrections page. */
   contactEmail: process.env.CONTACT_EMAIL ?? "",
+  /** Pick the Joint's own official profiles (comma-separated URLs), linked as sameAs on the Organization. */
+  profiles: (process.env.SITE_PROFILES ?? "").split(",").map((s) => s.trim()).filter((s) => /^https?:\/\//.test(s)),
+} as const;
+
+/**
+ * IndexNow (Bing and the engines that share its index). The key is public by
+ * design: it is served at /{key}.txt from the public folder so engines can
+ * check that pings come from this site. Pings are only sent when INDEXNOW=on,
+ * so local runs never announce URLs.
+ */
+export const indexNow = {
+  key: "d632b94e7b1106de3376c2c8b5b6b82b",
+  endpoint: "https://api.indexnow.org/indexnow",
+  enabled: process.env.INDEXNOW === "on",
+} as const;
+
+/** Job alerts, sent by email through Resend. Without RESEND_API_KEY and ALERT_FROM an alert is logged, not sent. */
+export const alerts = {
+  resendApiKey: process.env.RESEND_API_KEY ?? "",
+  from: process.env.ALERT_FROM ?? "",
+  to: process.env.ALERT_TO ?? process.env.CONTACT_EMAIL ?? "",
 } as const;
