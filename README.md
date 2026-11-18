@@ -22,5 +22,5 @@ Events discovery site for Indian cities (pickthejoint.com). Project rules live i
 - `db/seed.ts` — cities, areas, categories (idempotent)
 
 ## Railway
-`railway.json` runs migrations and the seed before each deploy, then `npm start`.
+Railway does not read a config file for this service. These are set on the `web` service itself: pre-deploy command `npm run railway:release` (migrations and seed), start command `npm start`, health check path `/indore`.
 Set `DATABASE_URL` to the Railway Postgres reference variable on the web service.
