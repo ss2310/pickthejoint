@@ -1,6 +1,6 @@
 # Handoff: where the build stands
 
-Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 3b, and updated the same day after Prompts 4 and 5, a redesign, and Prompt 6. Read this with `CLAUDE.md` (project rules) and `README.md` (commands and layout). The owner works prompt by prompt from a numbered prompt file (Prompts 1 to 15). **The text of every prompt not yet built is in `docs/build-prompts.md`**, so there is no need to ask for it. Each prompt ends with checks that must be run and shown before moving on.
+Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 3b, and updated the same day after Prompts 4 and 5, a redesign, Prompt 6 and Prompt 7. Read this with `CLAUDE.md` (project rules) and `README.md` (commands and layout). The owner works prompt by prompt from a numbered prompt file (Prompts 1 to 15). **The text of every prompt not yet built is in `docs/build-prompts.md`**, so there is no need to ask for it. Each prompt ends with checks that must be run and shown before moving on.
 
 **Working rule from the owner (18 Nov):** at most two prompts per session. After the second prompt's checks, update this file and start a new session for the next prompt.
 
@@ -16,8 +16,9 @@ Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 
 | Redesign (owner's request, not a numbered prompt) | Live. Colourful hero band, a colour per category, card listings, self-hosted fonts |
 | 5 Hindi | Live under `/hi/`. Backfill run on 18 Nov: see "Prompt 5 check results" below |
 | 6 Submissions and admin area | Live. Checks run on 18 Nov: see "Prompt 6 check results" below. Poster email built but waits on the owner's Resend setup |
-| 7 Natural-language search | **Next** |
-| 8 to 15 | Not started. Text in `docs/build-prompts.md` |
+| 7 Natural-language search | Live. Checks run on 18 Nov: see "Prompt 7 check results" below |
+| 8 Citation tracker | **Next.** Starts with a question to the owner (see "Next: Prompt 8") |
+| 9 to 15 | Not started. Text in `docs/build-prompts.md` |
 
 Production showed 13 Indore events before Prompt 6; one approved submission has been added since.
 
@@ -68,6 +69,7 @@ Production showed 13 Indore events before Prompt 6; one approved submission has 
 - **Old site URLs:** none to redirect. Sitemaps are already submitted to Bing and Google.
 - **Hindi (Prompt 5):** English at plain paths, Hindi under `/hi/`. Translation by the mid-tier model into the `translations` table when text is created or changed, never on page load. Monthly limit $5 (`TRANSLATION_BUDGET_USD`) inside the model budget. The about, how-we-verify, corrections and changelog pages are English only for now; their `/hi/` addresses redirect.
 - **Submissions (Prompt 6), decided 18 Nov:** poster photos are stored privately in Postgres (`poster_images`, as cleaned JPEG bytes; no new service) and deleted the day after the event, or within 2 to 7 days when unused. The owner wants the poster email address through Resend inbound (built; waits on setup, below). The admin password is set by the owner on `/admin/setup` with a token from a Railway variable, never in chat. Public poster reading and screening have their own monthly limit, `SUBMISSIONS_BUDGET_USD` (default $3), inside the model budget. `sharp` became a direct dependency (it was already installed through Next.js; no account).
+- **Search (Prompt 7), built 18 Nov:** rules first, the fast tier only for queries the rules cannot read. Limits: 20 model readings an hour and 60 a day per hashed address; `SEARCH_BUDGET_USD` (default $3 a month) and `SEARCH_DAILY_BUDGET_USD` (default $0.25 a UTC day), both inside the model budget and both unset on `web` (defaults apply). Crawlers never trigger a model call. Past a limit the search quietly uses keywords.
 - **Enrichment (Prompt 4):** facts come from the entity's own Instagram bio (Apify) and from the mid-tier model with Anthropic's web search and web fetch tools. Monthly limit $20 inside the model budget, a quarter of it per weekly run. The owner approved the new `enrich` Railway service.
 
 ## Things learned the hard way
@@ -153,6 +155,41 @@ Built in PR #19, with follow-ups #20 (setup page takes the token in a field: a t
 - **Cost of the checks:** a few cents of model spend (screening at the fast tier, poster reading and one description at the mid tier), shown on the admin overview under "inside model: public submissions" and job `admin`.
 - **Turnstile in practice:** see "Cloudflare Turnstile and the browsers" above. Two poster uploads were refused although the widget showed success; PR #22 logs the reason, so check `web`'s logs for `[turnstile]` if visitors report it.
 
-## Next: Prompt 7
+## Prompt 7 check results (18 Nov, live site)
 
-Natural-language search. The text is in `docs/build-prompts.md`. It adds an admin view of common and zero-result queries, which belongs in the admin area built in Prompt 6 (`src/app/admin/`, reuse its components and `requireAdmin`). The `search_log` table already exists (Prompt 1). The fast tier parses queries; it needs its own daily spend limit through the budget guard (add a sub-budget in `src/config/index.ts`, as `submissions` was added).
+Built in PR #24, with follow-ups #25 (three model readings) and #26 (the restatement sentence, and this file). See the README section "Natural-language search" for how it works; `/admin/search` shows every query, how it was read and what it cost.
+
+**The 20 test queries** (run from this machine against pickthejoint.com, 7 English, 8 Hinglish, 5 Hindi on `/hi/`):
+
+| Query | Read by | Understood as | Results |
+|---|---|---|---|
+| comedy show this Saturday near Vijay Nagar | rules | comedy, Sat 21 Nov, Vijay Nagar | 0 |
+| what's on tonight | rules | tonight | 0 |
+| free events this weekend | rules | 20 to 22 Nov, free | 0 |
+| live music in Indore this week | rules | music, 18 to 24 Nov | 1 |
+| events on 5 December | rules | 5 Dec | 1 |
+| something fun to do with my parents on Sunday evening, maybe ghazal or sufi music | model | music, words "ghazal sufi" (missed Sunday: fixed in #25) | 0 (music shown without the words) |
+| places to dance salsa or bollywood this friday night near palasia | model | dance, Fri 20 Nov, New Palasia, words "salsa bollywood" (picked one of two Palasias: fixed in #25) | 0 |
+| aaj Indore mein kya hai | rules | today | 0 |
+| standup comedy kal | rules | comedy, tomorrow | 0 |
+| is weekend kya chal raha hai | rules | 20 to 22 Nov | 6 |
+| bachon ke liye kuch is Sunday | rules | kids, Sun 22 Nov | 0 |
+| aaj raat party kahan hai | rules | nightlife, tonight | 0 |
+| Harshit Mahawar show December mein | rules | December, words "harshit mahawar" | 1 |
+| dost ke saath weekend pe koi achha standup ya open mic dekhna hai | model | comedy, 20 to 22 Nov, words "open mic" | 0 |
+| koi sasta comedy show jo 500 se kam ho | model | comedy, paid, words "sasta 500 kam" (fixed in #25) | 0 (comedy shown without the words) |
+| इस शनिवार संगीत | rules | music, Sat 21 Nov | 0 |
+| आज इंदौर में क्या है | rules | today | 0 |
+| विजय नगर में फ्री इवेंट | rules | Vijay Nagar, free | 0 |
+| अगले हफ्ते कॉमेडी शो | rules | comedy, 23 to 29 Nov | 0 |
+| घर वालों के साथ अगले रविवार भजन संध्या या कवि सम्मेलन | model | religious and cultural, Sun 29 Nov, words "कवि सम्मेलन" | 0 |
+
+- **Cost:** 15 read by rules (free), 5 by the fast tier at $0.0003 each: **$0.0015 for the 20**. After #25 the three faulty ones were run again: Sunday kept, "Palasia" left as a word, "sasta 500 kam" dropped and price left empty ($0.0009). Search spend on 18 Nov: $0.0024 of the $0.25 daily cap.
+- **Many zero results are real:** the listing is still small (14 Indore events at the last count) and nothing is listed for today. The zero-result list in `/admin/search` is the intended signal for missing hub pages and handles.
+- Before #26, a reading with only a category ("comedy") wrongly said "We could not pick out a date, category or place"; the results were right.
+- The deploy check also logged one query ("comedy"), so the admin view shows 21 searches from the first run.
+- **Not checked live:** the per-address limit and the daily cap (covered by tests with a stand-in model; the check used 8 of the 20 model readings allowed per hour).
+
+## Next: Prompt 8
+
+Citation tracker and public proof. The text is in `docs/build-prompts.md`. **It starts with a question for the owner before any code:** how to run the AI checks (the owner has an existing tool that queries AI engines and may prefer to reuse it, or to enter results by hand at first). No paid AI-engine API without approval. The tables `citation_queries` and `citation_results` already exist (Prompt 1) and `crawler_log` is filling. The admin entry form belongs in `src/app/admin/`; the public page must be server-rendered in English and Hindi.

@@ -245,7 +245,8 @@ export const hi: Messages = {
       })[u.when.kind];
       const parts = [when, u.area && `${u.area} में`, u.price === "free" ? "फ़्री एंट्री वाले" : u.price === "paid" ? "टिकट वाले" : "",
         u.words?.length ? `${quote(u.words)} ${u.anyWords ? "में से किसी से" : "से"} मिलते` : "", u.category ? `${u.category} इवेंट` : "इवेंट"].filter(Boolean);
-      return parts.length === 1 ? "हमें तारीख़, श्रेणी या जगह समझ नहीं आई, इसलिए आगे होने वाले सभी इवेंट दिखा रहे हैं।"
+      const nothing = !u.category && !u.when && !u.area && !u.price && !u.words?.length;
+      return nothing ? "हमें तारीख़, श्रेणी या जगह समझ नहीं आई, इसलिए आगे होने वाले सभी इवेंट दिखा रहे हैं।"
         : `हमने इसे ऐसे समझा: ${parts.join(" ")}।`;
     },
     relaxed: (words: string[]) => `किसी लिस्टेड इवेंट में ${words.map((w) => `“${w}”`).join(" ")} नहीं मिला, इसलिए बाक़ी खोज से मिलते इवेंट दिखा रहे हैं।`,

@@ -16,6 +16,7 @@ import { closePool } from "../src/lib/db";
 import { cleanUp } from "../src/lib/pipeline/housekeeping";
 import type { LlmClient, LlmRequest, LlmResult, LlmRunOptions } from "../src/lib/pipeline/llm";
 import { getCity, listEvents, type City } from "../src/lib/queries";
+import { messages } from "../src/lib/locale";
 import {
   foldText, loadVocabulary, naturalSearch, parseByRules, resolveDates, understand, type ParsedQuery, type Vocabulary,
 } from "../src/lib/search";
@@ -102,6 +103,19 @@ describe("reading queries by rules", () => {
   it("folds the ways people type", () => {
     expect(foldText("  What’s ON, Tonight?! ")).toBe("whats on tonight");
     expect(foldText("फ़्री")).toBe(foldText("फ्री"));
+  });
+});
+
+describe("the restatement", () => {
+  it("says what was understood, in each language", () => {
+    const en = messages("en").search, hi = messages("hi").search;
+    expect(en.understood({ category: "Comedy" })).toBe("We read this as: comedy events.");
+    expect(hi.understood({ category: "कॉमेडी" })).toBe("हमने इसे ऐसे समझा: कॉमेडी इवेंट।");
+    expect(en.understood({ category: "College events", area: "Vijay Nagar", when: { kind: "day", from: "Saturday, 21 November 2026", to: "Saturday, 21 November 2026" } }))
+      .toBe("We read this as: college events on Saturday, 21 November 2026 in Vijay Nagar.");
+    expect(en.understood({ words: ["salsa", "bollywood"], anyWords: true })).toBe("We read this as: events mentioning any of “salsa” or “bollywood”.");
+    expect(en.understood({})).toMatch(/^We could not pick out/);
+    expect(hi.understood({})).toMatch(/^हमें तारीख़/);
   });
 });
 
