@@ -17,7 +17,9 @@ import type { LlmClient, LlmRequest, LlmResult, LlmRunOptions } from "../src/lib
 import { processPosts } from "../src/lib/pipeline/process";
 import { buildActorInput, normalisePost, scrapeInstagram } from "../src/lib/pipeline/scrape";
 import { findRoundupLinks, parseGoogleEvents, robotsAllows } from "../src/lib/pipeline/sources";
+import { auditCities } from "../src/lib/pipeline/audit";
 import { mergeDuplicates } from "../src/lib/pipeline/dedupe";
+import { cityVerdict } from "../src/lib/pipeline/resolve";
 import { localDate, nameKey, sameVenueKey, titleSimilarity, zonedToUtc } from "../src/lib/pipeline/text";
 
 let pool: Pool;
@@ -42,14 +44,14 @@ class FakeApify implements ApifyClient {
   }
 }
 
-type Kind = "filter" | "extract" | "same" | "write";
+type Kind = "filter" | "extract" | "same" | "write" | "city";
 class FakeLlm implements LlmClient {
   calls: { kind: Kind; dryRun: boolean }[] = [];
   constructor(private readonly respond: (kind: Kind, text: string) => unknown) {}
   async run<T>(requests: LlmRequest<T>[], opts: LlmRunOptions): Promise<LlmResult<T>[]> {
     return requests.flatMap((req) => {
       const kind: Kind = req.system.startsWith("You sort") ? "filter" : req.system.startsWith("You extract") ? "extract"
-        : req.system.startsWith("You compare") ? "same" : "write";
+        : req.system.startsWith("You compare") ? "same" : req.system.startsWith("You check event listings") ? "city" : "write";
       this.calls.push({ kind, dryRun: !!opts.dryRun });
       if (opts.dryRun) return [];
       const text = req.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n");
@@ -64,6 +66,7 @@ function event(over: Partial<Extraction["events"][number]> = {}): Extraction["ev
   return {
     announcement: "new_event", title: f("Aria Quartet Live"), start_date: f(inDays(3)), start_time: f("20:00"),
     end_date: f<string>(null), end_time: f<string>(null), venue_name: f("The Blue Room"), venue_instagram_handle: "the_blue_room",
+    city: f("Indore"),
     area: f("Vijay Nagar"), price_text: f("₹499 onwards"), is_free: f(false), booking_url: f<string>(null),
     performers: [{ name: "Aria Quartet", kind: "group", confidence: 0.9 }], organiser: f<string>(null),
     organiser_instagram_handle: null, category: f("music"), ...over,
@@ -277,6 +280,56 @@ describe("pipeline", () => {
     expect(report.estimate).toMatchObject({ postsWaiting: 1, postsExpectedFromScrape: 15 });
     expect((await pool.query("SELECT processing_state, filter_result FROM raw_posts")).rows).toEqual([{ processing_state: "new", filter_result: null }]);
     expect((await pool.query("SELECT count(*) AS n FROM events")).rows[0].n).toBe(0);
+  });
+});
+
+describe("city check", () => {
+  it("places an event by the city the post states, counting suburbs as the city", () => {
+    const areas = ["Vijay Nagar", "Mhow", "Rau"];
+    expect(cityVerdict(event(), "Indore", areas)).toBe("in");
+    expect(cityVerdict(event({ city: f("Indore, Madhya Pradesh") }), "Indore", areas)).toBe("in");
+    expect(cityVerdict(event({ city: f("Mhow") }), "Indore", areas)).toBe("in");
+    expect(cityVerdict(event({ city: f("Lancaster") }), "Indore", areas)).toBe("out");
+    expect(cityVerdict(event({ city: f<string>(null) }), "Indore", areas)).toBe("unknown");
+    expect(cityVerdict(event({ city: f("Indore", 0.3) }), "Indore", areas)).toBe("unknown");
+  });
+
+  it("does not publish an event in another city, and asks for review when the city cannot be told", async () => {
+    const llm = new FakeLlm((kind, text) => {
+      if (kind !== "extract") return DESCRIPTION;
+      return extraction([
+        event({ title: f("Clinic Grand Reopening"), venue_name: f("Heritage Medical Group Lancaster"), venue_instagram_handle: null, city: f("Lancaster") }),
+        ...(text.includes("@indore_gigs") ? [event({ title: f("Mystery Pop-up"), venue_name: f("Somewhere Hall"), venue_instagram_handle: null, city: f<string>(null) })] : []),
+      ]);
+    });
+    const report = await ingest([post("P1", "the_blue_room", EVENT_CAPTION), post("P2", "indore_gigs", EVENT_CAPTION)], llm);
+    expect(report.resolve).toMatchObject({ created: 0, outOfCity: 2, queued: 1 });
+    expect((await pool.query("SELECT count(*) AS n FROM events")).rows[0].n).toBe(0);
+    expect((await pool.query("SELECT count(*) AS n FROM venues")).rows[0].n).toBe(0);
+    expect((await pool.query("SELECT reason FROM review_queue")).rows).toEqual([{ reason: "could not tell whether the event is in Indore" }]);
+    expect((await pool.query("SELECT processing_state FROM raw_posts ORDER BY shortcode")).rows.map((r) => r.processing_state)).toEqual(["filtered_out", "queued_review"]);
+  });
+
+  it("audits listings published before the check existed: unpublishes the out-of-city one, once", async () => {
+    const llm = new FakeLlm((kind, text) => {
+      if (kind === "city") return text.includes("Lancaster") ? { takes_place_in_city: false, actual_city: "Lancaster, California", confidence: 0.95 }
+        : { takes_place_in_city: true, actual_city: null, confidence: 0.9 };
+      return kind === "extract" ? extraction([event()]) : DESCRIPTION;
+    });
+    await ingest([post("P1", "the_blue_room", EVENT_CAPTION)], llm);
+    const { rows: [city] } = await pool.query("SELECT id FROM cities WHERE slug = 'indore'");
+    const { rows: [v] } = await pool.query("INSERT INTO venues (city_id, slug, name) VALUES ($1, 'hmg-lancaster', 'Heritage Medical Group Lancaster') RETURNING id", [city.id]);
+    await pool.query(
+      `INSERT INTO events (city_id, venue_id, slug, title, starts_at, local_date, confidence, is_published, origin)
+       VALUES ($1,$2,'clinic-reopening','Clinic Grand Reopening', now() + interval '3 days', current_date + 3, 0.9, true, 'scraped')`, [city.id, v.id]);
+    await pool.query("UPDATE events SET city_checked = false"); // as if both predate the check
+
+    const audit = await auditCities(pool, llm, { jobName: "test" });
+    expect(audit).toMatchObject({ checked: 2, inCity: 1, unsure: 0, unpublished: [{ title: "Clinic Grand Reopening", actualCity: "Lancaster, California" }] });
+    expect((await pool.query("SELECT title, is_published FROM events ORDER BY id")).rows).toEqual([
+      { title: "Aria Quartet Live", is_published: true }, { title: "Clinic Grand Reopening", is_published: false }]);
+    expect((await pool.query("SELECT reason FROM review_queue")).rows).toEqual([{ reason: "unpublished: appears to take place outside Indore" }]);
+    expect((await auditCities(pool, llm, { jobName: "test" })).checked).toBe(0);
   });
 });
 

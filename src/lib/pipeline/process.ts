@@ -9,6 +9,7 @@ import type { Pool } from "pg";
 import { apify, ingestion } from "../../config";
 import { guardedCall } from "../budget-guard";
 import type { ApifyClient } from "./apify";
+import { auditCities, type AuditReport } from "./audit";
 import { extractionRequest, fetchImages, missingForTranscript, type Extraction, type ExtractionInput } from "./extract";
 import { filterRequest, ruleFilter, type FilterLabel } from "./filter";
 import { estimateUsd, type LlmClient } from "./llm";
@@ -104,6 +105,7 @@ export async function processPosts(pool: Pool, deps: Deps, opts: ProcessOptions)
     resolve: emptyCounts(),
     descriptions: { written: 0, failed: 0, modelUsd: 0 },
     eventsPublished: 0,
+    cityAudit: undefined as AuditReport | undefined,
     costs: {} as Record<string, number | null>,
     estimate: undefined as undefined | Record<string, unknown>,
   };
@@ -142,6 +144,9 @@ export async function processPosts(pool: Pool, deps: Deps, opts: ProcessOptions)
     };
     return report;
   }
+
+  // Listings published before the city check existed are audited once.
+  report.cityAudit = await auditCities(pool, llm, run);
 
   const answers = await llm.run(unclear.map((v) => filterRequest(String(v.row.id), v.row.caption ?? "", v.row.handle, v.row.handle_type ?? "account")), run);
   const answerById = new Map(answers.map((a) => [a.id, a]));
@@ -244,7 +249,7 @@ export async function processPosts(pool: Pool, deps: Deps, opts: ProcessOptions)
   report.descriptions = await writeDescriptions(pool, llm, run);
   report.eventsPublished = report.descriptions.written;
 
-  const modelUsd = report.filter.modelUsd + report.extraction.modelUsd + report.resolve.dedupModelUsd + report.descriptions.modelUsd;
+  const modelUsd = report.filter.modelUsd + report.extraction.modelUsd + report.resolve.dedupModelUsd + report.descriptions.modelUsd + report.cityAudit.modelUsd;
   const posts = fresh.length;
   report.extraction.modelUsd = usd(report.extraction.modelUsd);
   report.resolve.dedupModelUsd = usd(report.resolve.dedupModelUsd);
