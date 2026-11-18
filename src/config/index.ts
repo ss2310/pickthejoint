@@ -363,7 +363,7 @@ export const search = {
 
 /**
  * Citation tracker (Prompt 8). The AI engines are asked through the owner's
- * GeoGrid tool from his own computer (scripts/citations/geogrid_run.py), with
+ * GeoGrid tool from the owner's own computer (scripts/citations/geogrid_run.py), with
  * GeoGrid's own keys; the results file is imported in /admin/citations.
  * Engines without an automated route are entered by hand.
  */
