@@ -1,6 +1,6 @@
 # Handoff: where the build stands
 
-Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 3b. Read this with `CLAUDE.md` (project rules) and `README.md` (commands and layout). The owner works prompt by prompt from a numbered prompt file (Prompts 1 to 12) and pastes each prompt into chat; each prompt ends with checks that must be run before moving on.
+Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 3b, and updated the same day after Prompt 4. Read this with `CLAUDE.md` (project rules) and `README.md` (commands and layout). The owner works prompt by prompt from a numbered prompt file (Prompts 1 to 12) and pastes each prompt into chat; each prompt ends with checks that must be run before moving on.
 
 ## Status
 
@@ -10,8 +10,9 @@ Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 
 | 2 Ingestion pipeline | Live. First production run on 18 Nov: 107 posts, 20 events published, about $0.97 |
 | 3 Public pages | Live at pickthejoint.com |
 | 3b Indexing, crawl access, trust | Live. One check outstanding: the job alert email (needs Resend settings, see below) |
-| 4 Entity enrichment | **Next** |
-| 5 to 12 | Not started |
+| 4 Entity enrichment | Live. First production run on 18 Nov: see "Prompt 4 check results" below |
+| 5 | **Next** |
+| 6 to 12 | Not started |
 
 Production currently shows 13 Indore events.
 
@@ -20,21 +21,24 @@ Production currently shows 13 Indore events.
 - `web`: the Next.js site. Pre-deploy `npm run railway:release` (migrations, seed, one-time handle load). Deploys from `main`.
 - `ingest`: cron `30 0 * * *` (06:00 IST), `npm run job:ingest -- --batch`.
 - `housekeeping`: cron `0 19 * * *` (00:30 IST), `npm run job:housekeeping`.
+- `enrich`: cron `30 20 * * 0` (Monday 02:00 IST), `npm run job:enrich`. Created for Prompt 4. Its variables are references to `web` (and to `ingest` for `APIFY_USD_PER_POST`), plus `ENRICHMENT_BUDGET_USD=20` and `INDEXNOW=on`.
 - `Postgres`.
-- All three services redeploy on every merge to `main`. Job services take their secrets by reference from `web`.
+- All four services redeploy on every merge to `main`. Job services take their secrets by reference from `web`.
 - Deploy settings and variables live on the services, not in a file.
 
 **To run a job once:** change its cron schedule to a few minutes ahead, redeploy the service, wait for the run, read the service's deploy logs for the report JSON, then set the schedule back and redeploy. Schedule changes only take effect after a redeploy. Runs start a minute or two after the scheduled minute.
+
+**To run enrichment once on chosen pages:** set `ENRICH_ARGS` on the `enrich` service (for example `--types venue --limit 5`, or `--slugs ohlio,fabric` to redo pages that were already enriched), run it once as above, then delete `ENRICH_ARGS` so the weekly run goes back to its defaults.
 
 **Do not read Railway variable values** (they include API keys). Variable names are safe to list.
 
 ## This machine
 
 - Repo: `C:\Users\Utsav Goyal\Documents\Pick The Joint` (`ss2310/pickthejoint`).
-- No Postgres, Docker or Railway CLI is installed. Tests need a Postgres at `TEST_DATABASE_URL`. A throwaway one can be run with the `embedded-postgres` npm package from a scratch folder; create its databases with `ENCODING 'UTF8' TEMPLATE template0` (the Windows default encoding rejects the rupee sign). The previous session ran one on port 54329 with databases `ptj` and `ptj_test`; it does not survive a reboot.
+- No Postgres, Docker or Railway CLI is installed. Tests need a Postgres at `TEST_DATABASE_URL`. A throwaway one can be run with the `embedded-postgres` npm package from a scratch folder; create its databases with `ENCODING 'UTF8' TEMPLATE template0` (the Windows default encoding rejects the rupee sign). The previous session ran one on port 54329 with databases `ptj` and `ptj_test` (user and password both `ptj`); it does not survive a reboot. The `TEST_DATABASE_URL` in `.env.local` points at port 5432 and does not work: pass `TEST_DATABASE_URL=postgres://ptj:ptj@localhost:54329/ptj_test` in the shell when running `npx vitest run`.
 - `.env.local` (git-ignored) holds real keys for local paid runs. Run jobs locally with `npx tsx --env-file=.env.local scripts/jobs/ingest.ts ...` and set `DATABASE_URL` in the shell first, because the file's own `DATABASE_URL` is not usable locally.
 - `npm run db:dev-seed` loads made-up demo listings into a local database for page work.
-- Shell heredocs mangle backslashes on this machine. Write files with the editor tools, or put edit scripts in a file and run them.
+- Shell heredocs mangle backslashes and can break on quotes and backticks on this machine. Write files with the editor tools, or put edit scripts in a file and run them.
 
 ## Decisions the owner has made
 
@@ -48,6 +52,7 @@ Production currently shows 13 Indore events.
 - **About page:** the site "does not currently take payment for listings".
 - **Email service:** Resend.
 - **Old site URLs:** none to redirect. Sitemaps are already submitted to Bing and Google.
+- **Enrichment (Prompt 4):** facts come from the entity's own Instagram bio (Apify) and from the mid-tier model with Anthropic's web search and web fetch tools. Monthly limit $20 inside the model budget, a quarter of it per weekly run. The owner approved the new `enrich` Railway service.
 
 ## Things learned the hard way
 
@@ -56,12 +61,16 @@ Production currently shows 13 Indore events.
 - **Collab posts:** a post on a handle's profile can be owned by another account. It is filed under the profile it was fetched from.
 - **Description writer** sometimes says a fact is missing ("No ticket price has been provided") despite being told not to. Worth tightening in `src/lib/pipeline/write.ts`.
 
+- **Enrichment, paused turns:** a research request with web search can stop with `pause_turn` and continue in the next response. The notes are everything written after the last tool call across all of those responses; keeping only the last response loses most of them and makes every entity look unidentifiable.
+- **Enrichment, identity:** the researcher was at first too ready to call an identity uncertain (for instance when two listing sites gave different addresses). The prompts now separate "which venue or performer is this" from doubt about one detail.
+- **Enrichment, venues without a website:** a venue known only from listing sites (Zomato, Justdial, Tripadvisor, magicpin) yields little: those are weak sources, so a fact needs two of them to agree, and conflicting addresses go to review.
+
 ## Prompt 3b check results (18 Nov, live site)
 
 - **Crawl access:** 17 crawler agents, 85 requests, none blocked.
 - **IndexNow:** first ping sent 55 URLs and was accepted. Key file: `public/d632b94e7b1106de3376c2c8b5b6b82b.txt`.
 - **Rich Results Test:** three event pages tested in Google's tool; each showed valid Events, Breadcrumbs and Organisation items. Remaining warnings are optional fields the source did not state (`offers`, `endDate`, `organizer`).
-- **Geocoding:** 11 venues tried, 1 located, 10 not found. OpenStreetMap has thin coverage of Indore venues by name. Prompt 4 enrichment should supply addresses, which geocode far better than names; consider retrying a venue once it has an address (`geocoded_at` currently stops any retry).
+- **Geocoding:** 11 venues tried, 1 located, 10 not found. OpenStreetMap has thin coverage of Indore venues by name. Since Prompt 4, a venue that gains an address is tried again (enrichment clears `geocoded_at`), by name and then by address; a match on the address alone goes to the review queue, never straight to the page.
 - **Alert email: not yet proven.** Needs `RESEND_API_KEY` and `ALERT_FROM` (an address on a domain verified in Resend) on the `ingest` and `housekeeping` services. Then set `FAIL_ON_PURPOSE=housekeeping` for one run to confirm the email arrives, and remove it.
 
 ## Waiting on the owner
@@ -73,11 +82,30 @@ Production currently shows 13 Indore events.
 
 ## Not built yet that later prompts assume
 
-- No admin area. 19 review-queue items and about 108 suggested handles are waiting, visible only in the database (Prompt 6).
+- No admin area. 19 review-queue items and about 108 suggested handles are waiting, visible only in the database (Prompt 6). Enrichment adds `entity_fact` items (unsure facts, identities it could not confirm, text it could not write).
+- Enrichment is tried once per entity. Nothing yet re-flags an entity for a fresh look (for example after a year, or when it gains more events); set `needs_enrichment = true` or use `--slugs`.
+- Enriched text is English only; Hindi comes with the translation prompt.
 - No read access to the production database from this machine. Checks so far used job reports in Railway logs and the public site.
 
-## Next: Prompt 4 (entity enrichment)
+## Prompt 4 check results (18 Nov, live site)
 
-Ask the owner to paste Prompt 4 if it is not in the chat. In outline: a weekly job that fills in venue, artist and organiser pages from public sources, within a per-run budget through the budget guard, with every fact stored against its source URL in `entity_sources`, own-words writing, professional public facts only, doubtful items to the review queue. Its checks: enrich 5 venues and 5 artists from live data, show the pages and sources, report cost per entity.
+Two runs of the `enrich` job on production, 22 entity runs in all (Ohlio was run twice).
 
-Before building, tell the owner the plan for where facts come from. The mid-tier Claude model with the web search tool is the obvious route, and its per-search cost must go through the budget guard under a new sub-budget.
+| Run | Entities | Cost | Per entity |
+|---|---|---|---|
+| 1 (5 venues, 5 artists) | 10 | $1.74 | $0.17 |
+| 2 (6 venues, 6 artists) | 12 | $2.01 | $0.17 |
+
+Per entity the cost ranged from $0.09 to $0.27: research with web search is about 90% of it, reading the notes into facts about $0.01 to $0.02, writing the text under $0.01, the Instagram bio $0.0023.
+
+- **Venues (11 tried): 9 filled in, 2 sent to review.** Filled in: MARQ Indore, Skydeck (Berlin Haus de Gourmet), Ohlio, Atelier V, Brilliant Convention Centre, The Piano Project (area and Facebook link only), Labhganga Exhibition Centre, Romeo Lane Indore. Saket Club and Fabric could not be told apart from namesakes and are in the review queue.
+- **Artists (11 tried): 4 filled in, 2 sent to review, 5 not found.** Filled in: Major Minor, The Yellow Diary, Esani Dey, Sumit Gupta. Chitralekha and one other are in review. Tanisha, U4ria and three of Kvanh, Gopa Kumar, Lobo Miro and DANIQ returned nothing reliable and stay `noindex` stubs. Single-name DJs and local acts with no press are the usual misses.
+- No artist page got a "Notable work" list yet: the researcher named works but rarely gave a direct link on an official platform, so they went into the text instead.
+- Fixed after run 1: `tripadvisor.in` and `tripadvisor.com` were counted as two sources; text hedged and padded.
+- Worth a look in a later pass: Ohlio's text gives the venue's phone numbers (from its own Instagram bio); Brilliant Convention Centre's text mentions one dated event; "Sumit Gupta" is a business speaker filed as an artist because the pipeline files every named participant as one.
+- The identities and facts in review cannot be read from this machine (no production database access); they wait for the admin area.
+- `ENRICH_ARGS` on the service is set to an empty value (the tools here cannot delete a variable); it has no effect and can be deleted in the Railway dashboard.
+
+## Next: Prompt 5
+
+Ask the owner to paste Prompt 5; it is not in this repository.
