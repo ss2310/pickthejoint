@@ -12,13 +12,17 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx db/seed.ts",
     "import:handles": "tsx scripts/import-handles.ts",
-    "railway:release": "npm run db:migrate && npm run db:seed"
+    "job:ingest": "tsx scripts/jobs/ingest.ts",
+    "job:housekeeping": "tsx scripts/jobs/housekeeping.ts",
+    "railway:release": "npm run db:migrate && npm run db:seed && npm run import:handles -- data/handles-indore.csv --if-empty"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.10.0",
     "next": "15.5.29",
     "pg": "^8.23.1",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

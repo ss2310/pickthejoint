@@ -2,7 +2,10 @@
  * Imports Instagram handles from a CSV with columns: handle, type, city, tier.
  * `city` may be the city slug or name (case-insensitive) and must already exist.
  * Existing handles are updated (type, city, tier) and reactivated.
- * Usage: npm run import:handles -- path/to/handles.csv [--dry-run]
+ * Usage: npm run import:handles -- path/to/handles.csv [--dry-run] [--if-empty]
+ * --if-empty imports only when the handles table has no rows yet. The release
+ * command uses it to load the starting list once, without later overwriting
+ * tiers changed by hand.
  */
 import { readFileSync } from "node:fs";
 import type { Pool } from "pg";
@@ -111,10 +114,18 @@ if (require.main === module) {
   const file = args.find((a) => !a.startsWith("--"));
   const dryRun = args.includes("--dry-run");
   if (!file) {
-    console.error("usage: npm run import:handles -- <file.csv> [--dry-run]");
+    console.error("usage: npm run import:handles -- <file.csv> [--dry-run] [--if-empty]");
     process.exit(1);
   }
-  importHandles(getPool(), readFileSync(file, "utf8"), dryRun)
+  const ifEmpty = args.includes("--if-empty");
+  (async () => {
+    if (ifEmpty && (await getPool().query("SELECT 1 FROM handles LIMIT 1")).rowCount) {
+      console.log("handles table is not empty; nothing imported");
+      await closePool();
+      process.exit(0);
+    }
+    return importHandles(getPool(), readFileSync(file, "utf8"), dryRun);
+  })()
     .then((r) => {
       console.log(`${dryRun ? "[dry run] would insert" : "inserted"} ${r.inserted}, updated ${r.updated}, errors ${r.errors.length}`);
       for (const e of r.errors) console.log(`  line ${e.line}: ${e.message}`);
