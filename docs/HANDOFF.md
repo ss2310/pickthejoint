@@ -1,6 +1,8 @@
 # Handoff: where the build stands
 
-Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 3b, and updated the same day after Prompt 4. Read this with `CLAUDE.md` (project rules) and `README.md` (commands and layout). The owner works prompt by prompt from a numbered prompt file (Prompts 1 to 12) and pastes each prompt into chat; each prompt ends with checks that must be run before moving on.
+Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 3b, and updated the same day after Prompts 4 and 5 and a redesign. Read this with `CLAUDE.md` (project rules) and `README.md` (commands and layout). The owner works prompt by prompt from a numbered prompt file (Prompts 1 to 15). **The text of every prompt not yet built is in `docs/build-prompts.md`**, so there is no need to ask for it. Each prompt ends with checks that must be run and shown before moving on.
+
+**Working rule from the owner (18 Nov):** at most two prompts per session. After the second prompt's checks, update this file and start a new session for the next prompt.
 
 ## Status
 
@@ -11,8 +13,10 @@ Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 
 | 3 Public pages | Live at pickthejoint.com |
 | 3b Indexing, crawl access, trust | Live. One check outstanding: the job alert email (needs Resend settings, see below) |
 | 4 Entity enrichment | Live. First production run on 18 Nov: see "Prompt 4 check results" below |
-| 5 | **Next** |
-| 6 to 12 | Not started |
+| Redesign (owner's request, not a numbered prompt) | Live. Colourful hero band, a colour per category, card listings, self-hosted fonts |
+| 5 Hindi | Live under `/hi/`. Backfill run on 18 Nov: see "Prompt 5 check results" below |
+| 6 Submissions and admin area | **Next** |
+| 7 to 15 | Not started. Text in `docs/build-prompts.md` |
 
 Production currently shows 13 Indore events.
 
@@ -21,12 +25,15 @@ Production currently shows 13 Indore events.
 - `web`: the Next.js site. Pre-deploy `npm run railway:release` (migrations, seed, one-time handle load). Deploys from `main`.
 - `ingest`: cron `30 0 * * *` (06:00 IST), `npm run job:ingest -- --batch`.
 - `housekeeping`: cron `0 19 * * *` (00:30 IST), `npm run job:housekeeping`.
-- `enrich`: cron `30 20 * * 0` (Monday 02:00 IST), `npm run job:enrich`. Created for Prompt 4. Its variables are references to `web` (and to `ingest` for `APIFY_USD_PER_POST`), plus `ENRICHMENT_BUDGET_USD=20` and `INDEXNOW=on`.
+- `enrich`: cron `30 20 * * 0` (Monday 02:00 IST), `npm run job:enrich`. Created for Prompt 4. Its variables are references to `web` (and to `ingest` for `APIFY_USD_PER_POST`), plus `ENRICHMENT_BUDGET_USD=20`, `INDEXNOW=on` and `TRANSLATION=on`. It is also the service used for one-off scripts (see below).
+- `TRANSLATION=on` is set on `ingest` and `enrich`, so text they create or change is translated into Hindi at the end of each run.
 - `Postgres`.
 - All four services redeploy on every merge to `main`. Job services take their secrets by reference from `web`.
 - Deploy settings and variables live on the services, not in a file.
 
-**To run a job once:** change its cron schedule to a few minutes ahead, redeploy the service, wait for the run, read the service's deploy logs for the report JSON, then set the schedule back and redeploy. Schedule changes only take effect after a redeploy. Runs start a minute or two after the scheduled minute.
+**To run a job once:** change its cron schedule to a few minutes ahead, then make the service build again, wait for the run, read the service's deploy logs for the report JSON, then set the schedule back. Schedule and start-command changes only take effect on a new build: the Railway `redeploy` tool reuses the previous deployment's settings (on 18 Nov it ran the old start command and spent $1.21 on an enrichment run nobody asked for). Use `connect-service-source` with the same repo and branch to force a fresh build. Runs start a minute or two after the scheduled minute.
+
+**To run a one-off script on production** (for example `npm run translate:backfill -- --dry-run`): set it as the `enrich` service's start command with a schedule a few minutes ahead, force a fresh build as above, read the logs, then put back `npm run job:enrich` and `30 20 * * 0`.
 
 **To run enrichment once on chosen pages:** set `ENRICH_ARGS` on the `enrich` service (for example `--types venue --limit 5`, or `--slugs ohlio,fabric` to redo pages that were already enriched), run it once as above, then delete `ENRICH_ARGS` so the weekly run goes back to its defaults.
 
@@ -47,11 +54,12 @@ Production currently shows 13 Indore events.
 - **Reel transcripts:** off (14 requested in the first run, none filled a missing fact). The actor `steadyfetch/instagram-reel-transcript-scraper` is mapped if they are turned back on.
 - **Google event results:** off. Google removed its Events tab; the one test returned nothing.
 - **News:** Free Press Journal and Patrika are on. Dainik Bhaskar and Naidunia forbid automated collection and must not be added.
-- **Design:** approved. One stylesheet, system fonts, no client scripts of our own.
+- **Design:** replaced on 18 Nov at the owner's request ("the website looks very dated"). Still one stylesheet and no client scripts of our own. Fonts are Bricolage Grotesque (headings), DM Sans (text) and Noto Sans Devanagari (Hindi), stored as files in `src/fonts` because fetching them from Google at build time failed intermittently. The generated event share images (`/image/1x1` and so on) still use the old colours.
 - **Contact address:** utsav@themaskedmarketers.us (set as `CONTACT_EMAIL` on `web`).
 - **About page:** the site "does not currently take payment for listings".
 - **Email service:** Resend.
 - **Old site URLs:** none to redirect. Sitemaps are already submitted to Bing and Google.
+- **Hindi (Prompt 5):** English at plain paths, Hindi under `/hi/`. Translation by the mid-tier model into the `translations` table when text is created or changed, never on page load. Monthly limit $5 (`TRANSLATION_BUDGET_USD`) inside the model budget. The about, how-we-verify, corrections and changelog pages are English only for now; their `/hi/` addresses redirect.
 - **Enrichment (Prompt 4):** facts come from the entity's own Instagram bio (Apify) and from the mid-tier model with Anthropic's web search and web fetch tools. Monthly limit $20 inside the model budget, a quarter of it per weekly run. The owner approved the new `enrich` Railway service.
 
 ## Things learned the hard way
@@ -106,6 +114,18 @@ Per entity the cost ranged from $0.09 to $0.27: research with web search is abou
 - The identities and facts in review cannot be read from this machine (no production database access); they wait for the admin area.
 - `ENRICH_ARGS` on the service is set to an empty value (the tools here cannot delete a variable); it has no effect and can be deleted in the Railway dashboard.
 
-## Next: Prompt 5
+## Prompt 5 check results (18 Nov, live site)
 
-Ask the owner to paste Prompt 5; it is not in this repository.
+- **Backfill dry run on production:** 131 items waiting (35 areas, 37 venue fields, 27 event fields, 22 artist fields, 8 organiser fields, the city name and state), 7 requests, estimated $0.14. The owner approved the real run.
+- **Backfill run:** 131 translated, 0 failed, $0.13 (translation sub-budget, $5 a month). `TRANSLATION=on` is now set on `ingest` and `enrich`, so new text is translated at the end of each run.
+- **Pages checked on the live site:** three event pages (`/hi/indore/events/stylista-winter-and-wedding-exhibition-2026-12-19`, `.../tie-global-summit-2026-indore-2026-12-14`, `.../the-bar-takeover-2026-11-28`), the Hindi city home `/hi/indore`, a venue and an artist page. Titles, venues, areas, descriptions, interface text and dates are in Hindi; hreflang links both ways; sitemaps list both languages.
+- **One bad translation found and fixed:** an event title came back as "...इंडिया टour" (a word half in Latin letters). Since PR #17 such translations are refused and any stored one is redone by the next run.
+- **Not Hindi's fault, still to fix:** the English description writer sometimes says a fact is missing ("No ticket price has been provided"), and the Hindi carries that over. See `src/lib/pipeline/write.ts`.
+- **Times** show as "8:00 pm" on Hindi pages (the platform's Hindi formatting); acceptable, but could become "रात 8:00 बजे" later.
+- **Unplanned spend on 18 Nov:** a Railway `redeploy` reused the old start command and ran a full enrichment for 8 entities ($1.21). See "To run a job once" above for the safe way.
+
+## Next: Prompt 6
+
+**Started on 18 Nov in a separate session ("Prompt 6: submissions and admin area"), working on branch `prompt-6-admin` in its own worktree.** Check its pull request before starting anything else.
+
+The text is in `docs/build-prompts.md`. It needs, before building: a Cloudflare Turnstile site key and secret (the owner created them in Section B setup; check the variable names on `web`), and a decision on where submitted poster images are stored privately (Railway has no object storage in this project yet; ask the owner before adding a paid service). Prompt 6 is the first to add an admin login, which later prompts (7 to 15) all build on.
