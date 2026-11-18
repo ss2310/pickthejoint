@@ -4,7 +4,7 @@
  *
  * A fixed set of questions per city and language (data/citation-queries.json,
  * approved by the owner) is asked every week. The automated engines are asked
- * through the owner's GeoGrid tool on his own computer
+ * through the owner's GeoGrid tool on the owner's own computer
  * (scripts/citations/geogrid_run.py); its results file is imported here, which
  * judges each answer from the sources it cited, logs the run's cost against the
  * `citations` budget and stores one row per question, engine and week. Engines

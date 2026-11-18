@@ -1,6 +1,6 @@
 # Handoff: where the build stands
 
-Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 3b, and updated the same day after Prompts 4 and 5, a redesign, Prompt 6 and Prompt 7. Read this with `CLAUDE.md` (project rules) and `README.md` (commands and layout). The owner works prompt by prompt from a numbered prompt file (Prompts 1 to 15). **The text of every prompt not yet built is in `docs/build-prompts.md`**, so there is no need to ask for it. Each prompt ends with checks that must be run and shown before moving on.
+Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 3b, and updated the same day after Prompts 4 and 5, a redesign, and Prompts 6, 7 and 8. Read this with `CLAUDE.md` (project rules) and `README.md` (commands and layout). The owner works prompt by prompt from a numbered prompt file (Prompts 1 to 15). **The text of every prompt not yet built is in `docs/build-prompts.md`**, so there is no need to ask for it. Each prompt ends with checks that must be run and shown before moving on.
 
 **Working rule from the owner (18 Nov):** at most two prompts per session. After the second prompt's checks, update this file and start a new session for the next prompt.
 
@@ -17,8 +17,9 @@ Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 
 | 5 Hindi | Live under `/hi/`. Backfill run on 18 Nov: see "Prompt 5 check results" below |
 | 6 Submissions and admin area | Live. Checks run on 18 Nov: see "Prompt 6 check results" below. Poster email built but waits on the owner's Resend setup |
 | 7 Natural-language search | Live. Checks run on 18 Nov: see "Prompt 7 check results" below |
-| 8 Citation tracker | **Next.** Starts with a question to the owner (see "Next: Prompt 8") |
-| 9 to 15 | Not started. Text in `docs/build-prompts.md` |
+| 8 Citation tracker | Live. Baseline week recorded on 18 Nov: see "Prompt 8 check results" below |
+| 9 Wider sourcing | **Next**, but only after a week of cost data (first production ingest was 18 Nov, so from about 25 Nov) |
+| 10 to 15 | Not started. Text in `docs/build-prompts.md` |
 
 Production showed 13 Indore events before Prompt 6; one approved submission has been added since.
 
@@ -69,6 +70,7 @@ Production showed 13 Indore events before Prompt 6; one approved submission has 
 - **Old site URLs:** none to redirect. Sitemaps are already submitted to Bing and Google.
 - **Hindi (Prompt 5):** English at plain paths, Hindi under `/hi/`. Translation by the mid-tier model into the `translations` table when text is created or changed, never on page load. Monthly limit $5 (`TRANSLATION_BUDGET_USD`) inside the model budget. The about, how-we-verify, corrections and changelog pages are English only for now; their `/hi/` addresses redirect.
 - **Submissions (Prompt 6), decided 18 Nov:** poster photos are stored privately in Postgres (`poster_images`, as cleaned JPEG bytes; no new service) and deleted the day after the event, or within 2 to 7 days when unused. The owner wants the poster email address through Resend inbound (built; waits on setup, below). The admin password is set by the owner on `/admin/setup` with a token from a Railway variable, never in chat. Public poster reading and screening have their own monthly limit, `SUBMISSIONS_BUDGET_USD` (default $3), inside the model budget. `sharp` became a direct dependency (it was already installed through Next.js; no account).
+- **AI citation checks (Prompt 8), decided 18 Nov:** the owner chose to reuse their GeoGrid tool (`C:\Users\Utsav Goyal\Documents\Joe Roofer Enrichment`), run from their own computer, with all four engines (ChatGPT and Perplexity through DataForSEO, Gemini through OpenRouter, Google AI Overviews: the same sources and routes as GeoGrid's probe), and approved the 30 questions in `data/citation-queries.json`. About $1.35 to $1.80 a run from GeoGrid's existing balances, logged under `CITATIONS_BUDGET_USD` (default $10 a month, scrape budget). GeoGrid itself is not changed and its keys never reach Pick the Joint. The geo-service "probe" (Railway project "Dashboard") could not be reused as is: it asks niche questions about one business and checks for a business name, not our questions and cited domains.
 - **Search (Prompt 7), built 18 Nov:** rules first, the fast tier only for queries the rules cannot read. Limits: 20 model readings an hour and 60 a day per hashed address; `SEARCH_BUDGET_USD` (default $3 a month) and `SEARCH_DAILY_BUDGET_USD` (default $0.25 a UTC day), both inside the model budget and both unset on `web` (defaults apply). Crawlers never trigger a model call. Past a limit the search quietly uses keywords.
 - **Enrichment (Prompt 4):** facts come from the entity's own Instagram bio (Apify) and from the mid-tier model with Anthropic's web search and web fetch tools. Monthly limit $20 inside the model budget, a quarter of it per weekly run. The owner approved the new `enrich` Railway service.
 
@@ -190,6 +192,24 @@ Built in PR #24, with follow-ups #25 (three model readings) and #26 (the restate
 - The deploy check also logged one query ("comedy"), so the admin view shows 21 searches from the first run.
 - **Not checked live:** the per-address limit and the daily cap (covered by tests with a stand-in model; the check used 8 of the 20 model readings allowed per hour).
 
-## Next: Prompt 8
+## Prompt 8 check results (18 Nov, live site)
 
-Citation tracker and public proof. The text is in `docs/build-prompts.md`. **It starts with a question for the owner before any code:** how to run the AI checks (the owner has an existing tool that queries AI engines and may prefer to reuse it, or to enter results by hand at first). No paid AI-engine API without approval. The tables `citation_queries` and `citation_results` already exist (Prompt 1) and `crawler_log` is filling. The admin entry form belongs in `src/app/admin/`; the public page must be server-rendered in English and Hindi.
+Built in PR #27, with #28 (three listing sites added to the competitor list after the baseline showed them). See the README section "AI citation tracker" for the weekly routine.
+
+- **Baseline recorded (week of Monday 16 Nov):** two GeoGrid runs, both imported by the owner at `/admin/citations`. The first asked all 120 checks (30 questions x 4 engines; $1.33). The second re-asked only what had failed, the rest coming from GeoGrid's 7-day cache ($0.024), and replaced the week's rows. **$1.35 in all.**
+- **Result: cited in 0 of 111 answered checks** (ChatGPT 0 of 30, Gemini 0 of 30, Perplexity 0 of 30, Google AI Overviews 0 of 21). Named in the text: 0. Google AI Overviews left 9 unanswered: 2 searches showed no Overview, 7 failed at DataForSEO (server errors and timeouts); those are left out of the share.
+- **Who is cited instead** (answers citing each, of 111): allevents.in 39, District 37, BookMyShow 33, google.com 25, Amar Ujala 24, stayhappening.com 21, Dainik Bhaskar 13, happeningnext.com 12, then Free Press Journal, Justdial, mepass.in, MeraEvents, Eventbrite.
+- **Same week:** 13 AI crawler visits (Monday to Wednesday), 11 upcoming events, 12 venues, 15 artists.
+- **Public page:** https://pickthejoint.com/ai-citations and `/hi/ai-citations` show the baseline row, server-rendered with `Dataset` structured data, in the pages sitemap and the footer.
+- **Not entered yet:** Bing Webmaster Tools AI Performance and Search Console figures (owner, weekly, at `/admin/citations`), and any Copilot or Claude checks by hand (optional).
+- The results files are kept in `citation-runs/` (git-ignored on `main`; the owner's main checkout ignores the folder once it pulls `main`).
+
+## Weekly routine for the owner (from Prompt 8)
+
+1. Run the two commands shown at `/admin/citations` from the Pick the Joint folder (dry run, then the run with the `--max-cost` the page suggests).
+2. Upload the file it names at `/admin/citations`.
+3. Type or upload that week's Bing AI Performance and Search Console figures on the same page.
+
+## Next: Prompt 9
+
+Wider sourcing. The text is in `docs/build-prompts.md`. Its own notes say Prompts 9 to 11 come only after a week of cost data; the first production ingest ran on 18 Nov, so start from about 25 Nov and read a week of `cost_log` (the admin overview shows spend by service, model and job) before planning. The baseline above shows which sources AI engines lean on for Indore (allevents.in, District, BookMyShow, Amar Ujala, stayhappening.com): useful when choosing what to widen into, within the source rules in `docs/sources.md` (Dainik Bhaskar and Naidunia forbid automated collection).
