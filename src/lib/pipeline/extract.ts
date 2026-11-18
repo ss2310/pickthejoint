@@ -44,7 +44,7 @@ export type ExtractedEvent = Extraction["events"][number];
 
 export interface ExtractionInput {
   id: string;
-  sourceKind: "instagram" | "google" | "news" | "poster";
+  sourceKind: "instagram" | "google" | "news" | "web" | "facebook" | "poster";
   /** Instagram handle, or the name of the web source. */
   sourceName: string;
   sourceType?: string;
@@ -101,7 +101,11 @@ export function extractionRequest(input: ExtractionInput): LlmRequest<Extraction
         ? `Google event result for ${input.cityName}`
         : input.sourceKind === "poster"
           ? `Photo of a poster sent to us (${input.sourceName}); "published" is the day it was sent`
-          : `Local news page: ${input.sourceName}`;
+          : input.sourceKind === "web"
+            ? `Event listing or calendar page: ${input.sourceName}; "published" is the day we read it`
+            : input.sourceKind === "facebook"
+              ? `Public Facebook event, read from ${input.sourceName}; "published" is the day we read it`
+              : `Local news page: ${input.sourceName}`;
   const parts = [
     `City: ${input.cityName}`,
     `Source: ${source}`,

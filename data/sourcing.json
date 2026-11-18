@@ -1,0 +1,50 @@
+{
+  "indore": {
+    "censusBbox": [22.6, 75.72, 22.85, 76.0],
+    "hashtags": ["indoreevents", "eventsinindore", "indoreevent", "indorenightlife", "indorecomedy", "indoremusic"],
+    "calendars": [
+      {
+        "key": "meraevents",
+        "name": "MeraEvents",
+        "kind": "jsonld-list",
+        "url": "https://meraevents.com/location/indore",
+        "eventUrlPattern": "^https://(www\\.)?meraevents\\.com/events/[a-z0-9-]+$",
+        "everyDays": 3,
+        "enabled": true,
+        "checked": "18 Nov 2026: robots.txt allows (Content-Signal search=yes, ai-train=no); terms say nothing about bots"
+      },
+      {
+        "key": "incredibleindia",
+        "name": "Incredible India (Madhya Pradesh festivals)",
+        "kind": "sitemap-page",
+        "url": "https://www.incredibleindia.gov.in/sitemap.xml",
+        "eventUrlPattern": "^https://www\\.incredibleindia\\.gov\\.in/en/festivals-and-events/madhya-pradesh/[a-z0-9-]+$",
+        "textStart": "Essential information",
+        "textEnd": "Explore more",
+        "mustMention": "Indore",
+        "everyDays": 7,
+        "enabled": true,
+        "checked": "18 Nov 2026: robots.txt allows; terms have no clause on automated access (reposting content needs consent; we take facts only)"
+      },
+      {
+        "key": "mptourism",
+        "name": "MP Tourism events",
+        "kind": "page",
+        "url": "https://www.mptourism.com/eventslisting.php",
+        "mustMention": "Indore",
+        "everyDays": 7,
+        "enabled": true,
+        "checked": "18 Nov 2026: robots.txt allows; the only terms page (disclaimer) says nothing about automated access"
+      },
+      {
+        "key": "iitindore",
+        "name": "IIT Indore events",
+        "kind": "page",
+        "url": "https://www.iiti.ac.in/home/more_events",
+        "everyDays": 7,
+        "enabled": true,
+        "checked": "18 Nov 2026: no robots.txt; no terms found"
+      }
+    ]
+  }
+}

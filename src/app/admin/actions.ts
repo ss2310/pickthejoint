@@ -202,8 +202,9 @@ export async function approveHandle(form: FormData): Promise<void> {
   const tier = form.get("tier") === "A" ? "A" : "B";
   const cityId = s!.city_id ?? (await pool.query<{ id: number }>("SELECT id FROM cities WHERE is_live ORDER BY id LIMIT 1")).rows[0].id;
   await pool.query(
-    `INSERT INTO handles (handle, handle_type, city_id, tier) VALUES ($1,$2,$3,$4)
-     ON CONFLICT (handle) DO UPDATE SET active = true, tier = EXCLUDED.tier, handle_type = EXCLUDED.handle_type, updated_at = now()`,
+    `INSERT INTO handles (handle, handle_type, city_id, tier, tier_set_by, tier_set_at) VALUES ($1,$2,$3,$4,'manual',now())
+     ON CONFLICT (handle) DO UPDATE SET active = true, tier = EXCLUDED.tier, handle_type = EXCLUDED.handle_type,
+       tier_set_by = 'manual', tier_set_at = now(), paused_reason = NULL, updated_at = now()`,
     [s!.handle, type, cityId, tier]);
   await pool.query("UPDATE suggested_handles SET status = 'approved', updated_at = now() WHERE id = $1", [num(form, "id")]);
   back("/admin/handles", `@${s!.handle} added as tier ${tier}.`);
@@ -220,7 +221,10 @@ export async function updateHandle(form: FormData): Promise<void> {
   const tier = form.get("tier") === "A" ? "A" : "B";
   const active = form.get("active") === "on";
   const { rows } = await getPool().query<{ handle: string }>(
-    "UPDATE handles SET tier = $2, active = $3, updated_at = now() WHERE id = $1 RETURNING handle", [num(form, "id"), tier, active]);
+    `UPDATE handles SET tier = $2, active = $3, updated_at = now(),
+       tier_set_by = CASE WHEN tier <> $2 THEN 'manual' ELSE tier_set_by END, tier_set_at = CASE WHEN tier <> $2 THEN now() ELSE tier_set_at END,
+       paused_reason = CASE WHEN $3 THEN NULL ELSE coalesce(paused_reason, 'paused by hand') END
+     WHERE id = $1 RETURNING handle`, [num(form, "id"), tier, active]);
   back("/admin/handles", rows[0] ? `@${rows[0].handle}: tier ${tier}, ${active ? "active" : "paused"}.` : "Not found.");
 }
 

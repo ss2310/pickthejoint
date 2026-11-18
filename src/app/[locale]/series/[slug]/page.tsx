@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { EventList, ExternalLinks, Hero, JsonLd, Updated } from "@/components/ui";
+import { EventList, ExternalLinks, Hero, JsonLd, SourceList, Updated } from "@/components/ui";
 import { displayTimeZone } from "@/config";
 import { alternates, localePath, messages, setLocale } from "@/lib/locale";
 import { getSeries, listEvents } from "@/lib/queries";
@@ -48,6 +48,7 @@ export default async function SeriesPage({ params }: Props) {
         </section>
         {past.length > 0 && <section aria-labelledby="past-heading"><h2 id="past-heading">{m.past}</h2><EventList events={past} empty="" /></section>}
         {links.length > 0 && <section aria-labelledby="links-heading"><h2 id="links-heading">{all.common.officialLinks}</h2><ExternalLinks links={links} /></section>}
+        <SourceList sources={s.sources} />
         <Updated at={modified} timeZone={displayTimeZone} />
         <JsonLd data={[seriesLd(s), pageLd(path, s.name, modified, ids.series(s.slug))]} />
       </div>

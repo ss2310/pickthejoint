@@ -13,8 +13,9 @@ Events discovery site for Indian cities (pickthejoint.com). Project rules live i
 ## Commands
 - `npm test` — migrations, seed, budget guard and handle import tests (uses `TEST_DATABASE_URL`, wipes it)
 - `npm run import:handles -- data/handles.csv [--dry-run]` — CSV columns `handle,type,city,tier`
-- `npm run job:ingest -- [--dry-run] [--batch] [--handles a,b --force] [--sources instagram,google,news] [--process-only]` — scrape due handles, fetch the other sources, then filter, extract, match and publish
-- `npm run job:housekeeping -- [--dry-run]` — mark finished events as happened and print the daily report
+- `npm run job:ingest -- [--dry-run] [--batch] [--handles a,b --force] [--sources instagram,google,news,web,facebook,discovery] [--force] [--max-items 5] [--process-only]` — scrape due handles, fetch the other sources, then filter, extract, match and publish (`--force` without `--handles` ignores the weekly schedule of the Prompt 9 sources; `--max-items` caps new items per source, for checks)
+- `npm run job:housekeeping -- [--dry-run] [--retier] [--coverage]` — mark finished events as happened, link the census and series, re-tier handles (first of the month), store the weekly coverage report (Mondays) and print the daily report
+- `npm run census -- --city indore [--dry-run] [--csv places.csv]` — venue census from OpenStreetMap (free), plus places from a CSV
 - `npm run job:enrich -- [--dry-run] [--types venue,artist,organiser] [--limit 5] [--slugs a,b]` — fill in venue, artist and organiser pages from public sources (weekly)
 - `npm run translate:backfill -- [--dry-run] [--batch] [--limit 200]` — translate public text that has no Hindi yet, or whose English has changed
 - `npm run typecheck`, `npm run lint`, `npm run build`
@@ -36,6 +37,18 @@ Scheduled jobs run as separate Railway cron services from the same repo, with th
 - ingest, daily: start command `npm run job:ingest -- --batch`
 - housekeeping, daily: start command `npm run job:housekeeping`
 - enrich, weekly: start command `npm run job:enrich`
+
+## Wider sourcing (Prompt 9)
+What each source is, its cost, and its terms and robots.txt findings: `docs/sources.md`. Per-city source lists (census area, hashtags, web calendars): `data/sourcing.json`. Festival series: `data/series.json`.
+- **Venue census** (`src/lib/pipeline/census.ts`, table `venue_census`, admin only): OpenStreetMap places, every listed venue, Instagram location tags from discovery, and places added by hand. A census row is linked to a venue with the same name; a place gets a public page only once it has a published event. `/admin/venues` lists places with no Instagram handle on record and places with no event in 60 days, and starts tracking a handle in one click.
+- **Handle tiers** (`tiering.ts`): on the first of each month housekeeping makes a handle tier A when it produced 2 or more events in 30 days (up to the per-city cap) and tier B otherwise, and pauses one with no event in 90 days. Handles younger than 30 days and tiers set by hand in the last 30 days are left alone. Changes are logged in `handle_changes` and shown at `/admin/handles`. A suggested handle credited in 3 or more event posts is offered at tier A.
+- **Snowball discovery** (`discovery.ts`): accounts tagged, mentioned or credited in event posts keep going to `suggested_handles` (with `event_posts` and `via`); a weekly, capped hashtag pull adds the accounts and location tags it sees. Nothing from it is published.
+- **Web calendars** (`calendars.ts`): listings read from their schema.org Event data, sitemap-driven pages and single pages read as text, at most every few days, robots.txt checked each run. Items are stored as `raw_posts` with `source_kind = 'web'` and go through the same matching, dedup and confidence rules.
+- **Facebook events** (`facebook.ts`): pages in `facebook_pages` (from Facebook links on venue and organiser pages, or added at `/admin/coverage`), read weekly, logged out, through Apify; `source_kind = 'facebook'`.
+- **Two sources:** an event confirmed by a second, independent source gets +0.1 confidence and the event page lists every source.
+- **Festival series** (`series.ts`): seeded from `data/series.json` with sources; an event attaches when its title has a series alias as whole words and it falls in one of the series' months.
+- **Outreach** (`/admin/outreach`, CSV at `/admin/outreach/export`): organisers and venues with events, page URL, public contact on record, and a plain "Listed on Pick the Joint" link per row.
+- **Coverage report** (`src/lib/coverage.ts`, `/admin/coverage`): per city and IST week, events published by the source that found them first, the share also found by a second source, new venues, census places and handles, and cost per published event by source (scraping from `cost_log`, model spend recorded per item in `raw_posts.model_usd`). Housekeeping stores last week's report every Monday.
 
 ## AI citation tracker (Prompt 8)
 - **Questions:** `data/citation-queries.json` holds the fixed, owner-approved questions (15 English and 15 Hindi for Indore). The seed loads them into `citation_queries`; a question removed from the file is switched off, never deleted. Do not reword a question: a changed question is a new one and breaks the week-on-week comparison.

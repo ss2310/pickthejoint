@@ -1,5 +1,5 @@
 /**
- * Idempotent seed: cities, areas, categories. Safe to run repeatedly.
+ * Idempotent seed: cities, areas, categories, citation questions, festival series. Safe to run repeatedly.
  * Adding a city later = add it here (or insert rows directly), plus its areas.
  * Usage: npm run db:seed
  */
@@ -12,6 +12,17 @@ import { getPool, closePool } from "../src/lib/db";
 export function citationQuestions(): Record<string, Record<"en" | "hi", string[]>> {
   const raw = JSON.parse(readFileSync(path.join(__dirname, "..", "data", "citation-queries.json"), "utf8")) as Record<string, unknown>;
   return Object.fromEntries(Object.entries(raw).filter(([k]) => !k.startsWith("_"))) as Record<string, Record<"en" | "hi", string[]>>;
+}
+
+export interface SeedSeries {
+  slug: string; name: string; recurrence: string; months: number[]; aliases: string[]; description: string;
+  sources: { url: string; title: string; fact: string }[];
+}
+
+/** Recurring festivals seeded before their dates are announced (Prompt 9): { city: [...] }. */
+export function seedSeries(): Record<string, SeedSeries[]> {
+  const raw = JSON.parse(readFileSync(path.join(__dirname, "..", "data", "series.json"), "utf8")) as Record<string, unknown>;
+  return Object.fromEntries(Object.entries(raw).filter(([k]) => !k.startsWith("_"))) as Record<string, SeedSeries[]>;
 }
 
 export const seedCities = [{ slug: "indore", name: "Indore", state: "Madhya Pradesh", is_live: true }];
@@ -99,6 +110,28 @@ export async function seed(pool: Pool): Promise<void> {
         }
       }
       await client.query("UPDATE citation_queries SET active = false WHERE city_id = $1 AND NOT (id = ANY($2::bigint[]))", [city.id, keep]);
+    }
+    // Festival series: the file adds and updates; a series is never deleted (its past events point at it).
+    // A series' sources are replaced from the file; its text changes only when the file changes.
+    for (const [citySlug, list] of Object.entries(seedSeries())) {
+      const city = (await client.query<{ id: number }>("SELECT id FROM cities WHERE slug = $1", [citySlug])).rows[0];
+      if (!city) continue;
+      for (const s of list) {
+        const { rows } = await client.query<{ id: number }>(
+          `INSERT INTO series (slug, name, city_id, description, recurrence, aliases, months) VALUES ($1,$2,$3,$4,$5,$6,$7)
+           ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, city_id = EXCLUDED.city_id, description = EXCLUDED.description,
+             recurrence = EXCLUDED.recurrence, aliases = EXCLUDED.aliases, months = EXCLUDED.months,
+             updated_at = CASE WHEN (series.name, series.description, series.recurrence) IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.description, EXCLUDED.recurrence)
+                               THEN now() ELSE series.updated_at END
+           RETURNING id`,
+          [s.slug, s.name, city.id, s.description, s.recurrence, s.aliases.map((a) => a.toLowerCase()), s.months]);
+        await client.query("DELETE FROM entity_sources WHERE entity_type = 'series' AND entity_id = $1", [rows[0].id]);
+        for (const src of s.sources) {
+          await client.query(
+            "INSERT INTO entity_sources (entity_type, entity_id, url, title, fact, strength) VALUES ('series',$1,$2,$3,$4,$5)",
+            [rows[0].id, src.url, src.title, src.fact, /\.gov\.in\//.test(src.url) ? "official" : /wikipedia\.org/.test(src.url) ? "weak" : "reputable"]);
+        }
+      }
     }
     await client.query("COMMIT");
   } catch (err) {

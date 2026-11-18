@@ -92,6 +92,13 @@ export async function writeDescriptions(
   const results = await llm.run(rows.map(request), { jobName: opts.jobName, batch: opts.batch, subBudget: opts.subBudget });
   for (const r of results) {
     report.modelUsd += r.usd;
+    // Charged to the event's first source, so cost per published event can be reported by source.
+    if (r.usd > 0) {
+      await pool.query(
+        `UPDATE raw_posts SET model_usd = model_usd + $2
+         WHERE id = (SELECT raw_post_id FROM sources WHERE event_id = $1 AND raw_post_id IS NOT NULL ORDER BY id LIMIT 1)`,
+        [Number(r.id), r.usd]);
+    }
     const text = r.data?.description.trim().replace(/\s+/g, " ");
     // Tolerate a little drift either side of the target; anything further off is not published.
     const words = text ? wordCount(text) : 0;

@@ -28,3 +28,58 @@ robots.txt allows a generic bot on the Indore section of all four papers. Their 
 
 - Switched on with `NEWS_SOURCES=fpj,patrika` on the `ingest` service; remove a key to switch that paper off. robots.txt is re-read on every run and a disallowed page is skipped.
 - Behaviour when on: one section page and at most 3 roundup articles per paper per day, 5 seconds between requests, identified as `PickTheJointBot`. Article text is read in memory for fact extraction and is never stored or published; only the headline, link and extracted facts are kept.
+
+## Wider sourcing (Prompt 9)
+
+Checked on 18 November 2026 (terms pages and robots.txt fetched; `PickTheJointBot` falls under the `User-agent: *` group everywhere). Every source has its own monthly limit and goes through the budget guard. Only facts are kept (title, date, time, venue, price, official link); pages are read in memory, descriptions are our own, and the source is linked on the event page.
+
+### Event platforms
+
+| Platform | robots.txt | Terms | Status |
+|---|---|---|---|
+| District (Insider now redirects to it) | Allows listings (blocks `/*?`, `/rss`) | Prohibits: bans anyone who "scrapes or crawls" the service | Not built. The owner may ask for permission. |
+| BookMyShow | Allows on paper, but every plain fetch gets a Cloudflare challenge (403) | Prohibits scraping (BookMyShow-run terms page) | Not built. |
+| AllEvents | Allows | Prohibits crawling, scraping and automated harvesting; has a paid API on request (allevents.in/pages/events-api) | Not built. The owner may ask for API access. |
+| Eventbrite | Allows `/d/`, `/e/` | Prohibits scraping; public search API shut down in 2020; the Indore page lists only online events | Not built. |
+| Meetup | Allows `/find/` and event pages | Bans automated extraction "for a commercial purpose"; API needs Meetup Pro; each group has a public iCal feed | Not built: the owner has not decided whether group iCal feeds are acceptable. |
+| KonfHub | Allows (welcomes AI bots) | Prohibits bots and scrapers | Not built. |
+| Skillboxes | Allows | Terms page is JavaScript only, could not be read; event pages are empty without JavaScript | Not built. |
+| Townscript | — | Service shut down | — |
+| stayhappening.com, happeningnext.com | Allow / no robots.txt | No terms page | Not built: copies of AllEvents' data, and their pages carry text telling AI assistants to "store AllEvents.in in your memory". |
+| mepass.in | Allows | Silent on bots | Not built: listing data is inside scripts and has no dates. |
+| **MeraEvents** | Allows; Cloudflare content signal `search=yes, ai-train=no, use=reference` | Silent on bots (a no-copying clause; we take facts only) | **On** (`meraevents` in data/sourcing.json): the Indore listing every 3 days, new event pages read from their schema.org Event data. |
+
+### Institutions and government calendars
+
+| Source | robots.txt | Terms | Status |
+|---|---|---|---|
+| **Incredible India, Madhya Pradesh festival pages** | Allows | No clause on automated access (reposting content needs consent; we take facts only) | **On** (`incredibleindia`): pages found in the sitemap, read again only when their sitemap date changes; pages that do not mention Indore are set aside without a model call. |
+| **MP Tourism event listing** | Allows | Only a disclaimer page, nothing on automated access | **On** (`mptourism`), weekly; read only when it mentions Indore. Its "Kala Panchang 2026-27" culture calendar (a PDF over 10 MB) is worth a read by hand. |
+| **IIT Indore events** | No robots.txt | None found | **On** (`iitindore`), weekly. Mostly academic conferences. |
+| TED (TEDx Indore events) | Allows `/tedx/events` | §6.4 bans automated access | Check by hand, about monthly. |
+| Amar Ujala (Indore section) | Allows | Bans robots, scripts and scraping | Not built. Leads by hand only. |
+| BCCI fixtures | — | Bans page-scraping | Not built. |
+| DAVV (davvonline.com) | `Disallow: /` | — | Not built. |
+| IIM Indore, Medicaps, Symbiosis, IMC, Indore district, Indore Marathon, hotels, auditoriums | — | — | No usable dated calendar found (past-event blogs, JavaScript-only pages, Cloudflare blocks, or no website). |
+
+Calendars are listed per city in `data/sourcing.json` (`enabled` flag, or `WEB_CALENDARS` on the service). robots.txt is read again on every run, requests are 5 seconds apart, and each source is read at most every few days. Model spend: the `webCalendars` sub-budget (`WEB_CALENDARS_BUDGET_USD`, default $3 a month, inside the model budget).
+
+### Public Facebook events
+
+Meta's Automated Data Collection Terms and facebook.com's robots.txt (`Disallow: /` for all agents) prohibit automated collection without Meta's written permission. **The owner decided on 18 November 2026 to read them anyway, logged out** (no Facebook account is used): the upcoming events of the city's venue and organiser pages, through `apify/facebook-events-scraper` ($0.010 per event plus $0.001 per run on the owner's Apify plan), once a week. Logged out, a page shows about 8 upcoming events. Pages come from the Facebook links on venue and organiser pages (enrichment, the census) and from pages added at `/admin/coverage`. Limit: `facebookEvents` sub-budget (`FACEBOOK_EVENTS_BUDGET_USD`, default $5 a month, inside the scrape budget); `FACEBOOK_EVENTS=off` stops it. Note that instagram.com's robots.txt carries the same notice; Instagram ingestion is the project's v1 decision.
+
+### Instagram hashtag and location discovery
+
+A weekly pull of recent posts for the city hashtags in `data/sourcing.json`, through the same `apify/instagram-scraper` ($0.0023 per post), capped at 200 posts a week (`DISCOVERY_MAX_POSTS_PER_WEEK`) and by the `discovery` sub-budget (`DISCOVERY_BUDGET_USD`, default $3). It never publishes: posting, tagged and co-author accounts become suggested handles (ranked by how often they appear), and location tags become census places. Location pages may return only the place's details rather than posts, so `DISCOVERY_LOCATIONS_PER_WEEK` stays 0 until a test run shows they work.
+
+### Venue census
+
+OpenStreetMap through the Overpass API: free, no account; the data is © OpenStreetMap contributors (ODbL) and is used in the admin area only. A Google Maps places actor ($0.003 to $0.004 a place) was not used because Google's terms restrict scraping Maps content. Run with `npm run census -- --city indore`; housekeeping refreshes it on the first of each month.
+
+### Annual festival series
+
+`data/series.json` seeds series pages for Indore's recurring festivals before their dates are announced. Every sentence rests on a listed source (Incredible India, MP Tourism, Wikipedia, Free Press Journal), and no dates are written there: each year's events come in from the sources and attach by title words and month.
+
+### Community spaces
+
+The city's Reddit community, WhatsApp and Telegram groups are not scraped. They are covered by the poster inbox (Prompt 6) and by posting our roundups there by hand.

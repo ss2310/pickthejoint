@@ -13,13 +13,14 @@ import type { Pool, PoolClient } from "pg";
 import { ingestion } from "../../config";
 import type { ExtractedEvent, Extraction } from "./extract";
 import type { LlmClient, LlmRequest } from "./llm";
+import { attachSeries } from "./series";
 import {
   daysBetween, diceSimilarity, handleKey, isClockTime, isIsoDate, localDate, nameKey, sameVenueKey, slugify, titleSimilarity, zonedToUtc,
 } from "./text";
 
 export interface PostContext {
   rawPostId: number;
-  sourceKind: "instagram" | "google" | "news" | "submission";
+  sourceKind: "instagram" | "google" | "news" | "web" | "facebook" | "submission";
   /** Instagram handle or source key. */
   handle: string;
   handleType?: string;
@@ -286,6 +287,7 @@ async function createEvent(db: Db, ctx: PostContext, e: ExtractedEvent, venueId:
   );
   await addSource(db, rows[0].id, ctx);
   await attachPeople(db, rows[0].id, e);
+  await attachSeries(db, [rows[0].id]);
   return rows[0].id;
 }
 
@@ -360,8 +362,11 @@ async function suggestHandles(db: Db, ctx: PostContext, ex: Extraction): Promise
   let added = 0;
   for (const h of found) {
     const res = await db.query<{ inserted: boolean }>(
-      `INSERT INTO suggested_handles (handle, city_id, reason, first_seen_post) VALUES ($1,$2,$3,$4)
-       ON CONFLICT (handle) DO UPDATE SET seen_count = suggested_handles.seen_count + 1, updated_at = now()
+      `INSERT INTO suggested_handles (handle, city_id, reason, first_seen_post, via, event_posts, last_seen_at)
+       VALUES ($1,$2,$3,$4,'{event_post}',1,now())
+       ON CONFLICT (handle) DO UPDATE SET seen_count = suggested_handles.seen_count + 1, event_posts = suggested_handles.event_posts + 1,
+         via = CASE WHEN 'event_post' = ANY(suggested_handles.via) THEN suggested_handles.via ELSE suggested_handles.via || '{event_post}' END,
+         last_seen_at = now(), updated_at = now()
        RETURNING (xmax = 0) AS inserted`,
       [h, ctx.cityId, `tagged or credited in an event post by @${ctx.handle}`, ctx.shortcode]);
     if (res.rows[0].inserted) added++;
