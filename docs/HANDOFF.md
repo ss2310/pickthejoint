@@ -116,8 +116,16 @@ Per entity the cost ranged from $0.09 to $0.27: research with web search is abou
 
 ## Prompt 5 check results (18 Nov, live site)
 
-RESULTS_PLACEHOLDER
+- **Backfill dry run on production:** 131 items waiting (35 areas, 37 venue fields, 27 event fields, 22 artist fields, 8 organiser fields, the city name and state), 7 requests, estimated $0.14. The owner approved the real run.
+- **Backfill run:** 131 translated, 0 failed, $0.13 (translation sub-budget, $5 a month). `TRANSLATION=on` is now set on `ingest` and `enrich`, so new text is translated at the end of each run.
+- **Pages checked on the live site:** three event pages (`/hi/indore/events/stylista-winter-and-wedding-exhibition-2026-12-19`, `.../tie-global-summit-2026-indore-2026-12-14`, `.../the-bar-takeover-2026-11-28`), the Hindi city home `/hi/indore`, a venue and an artist page. Titles, venues, areas, descriptions, interface text and dates are in Hindi; hreflang links both ways; sitemaps list both languages.
+- **One bad translation found and fixed:** an event title came back as "...इंडिया टour" (a word half in Latin letters). Since PR #17 such translations are refused and any stored one is redone by the next run.
+- **Not Hindi's fault, still to fix:** the English description writer sometimes says a fact is missing ("No ticket price has been provided"), and the Hindi carries that over. See `src/lib/pipeline/write.ts`.
+- **Times** show as "8:00 pm" on Hindi pages (the platform's Hindi formatting); acceptable, but could become "रात 8:00 बजे" later.
+- **Unplanned spend on 18 Nov:** a Railway `redeploy` reused the old start command and ran a full enrichment for 8 entities ($1.21). See "To run a job once" above for the safe way.
 
 ## Next: Prompt 6
+
+**Started on 18 Nov in a separate session ("Prompt 6: submissions and admin area"), working on branch `prompt-6-admin` in its own worktree.** Check its pull request before starting anything else.
 
 The text is in `docs/build-prompts.md`. It needs, before building: a Cloudflare Turnstile site key and secret (the owner created them in Section B setup; check the variable names on `web`), and a decision on where submitted poster images are stored privately (Railway has no object storage in this project yet; ask the owner before adding a paid service). Prompt 6 is the first to add an admin login, which later prompts (7 to 15) all build on.
