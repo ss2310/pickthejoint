@@ -274,7 +274,8 @@ export const en = {
       })[u.when.kind];
       const parts = [noun, when, u.area && `in ${u.area}`, u.price === "free" ? "with free entry" : u.price === "paid" ? "with paid entry" : "",
         u.words?.length ? `mentioning ${u.anyWords ? "any of " : ""}${quote(u.words)}` : ""].filter(Boolean);
-      return parts.length === 1 ? "We could not pick out a date, category or place, so here is everything coming up."
+      const nothing = !u.category && !u.when && !u.area && !u.price && !u.words?.length;
+      return nothing ? "We could not pick out a date, category or place, so here is everything coming up."
         : `We read this as: ${parts.join(" ")}.`;
     },
     relaxed: (words: string[]) => `No listed event mentions ${words.map((w) => `“${w}”`).join(" ")}, so these match the rest of your search.`,
