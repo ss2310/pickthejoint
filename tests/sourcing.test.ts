@@ -138,8 +138,11 @@ describe("venue census", () => {
     const venue = (await pool.query<{ id: number }>(
       "INSERT INTO venues (city_id, slug, name, official_links) VALUES ($1,'ohlio','Ohlio Gourmet Cafebar','{}') RETURNING id", [cityId])).rows[0].id;
     await pool.query("INSERT INTO venues (city_id, slug, name) VALUES ($1,'coffeenism','Coffeenism')", [cityId]);
-    const fetchFn = site({ "https://overpass-api.de/api/interpreter": JSON.stringify(overpass) });
-    const dry = await runCensus(pool, { city: "indore", dryRun: true, fetchFn });
+    let busy = 1;
+    const ok = site({ "https://overpass-api.de/api/interpreter": JSON.stringify(overpass) });
+    // The first request finds the server busy; the census tries again.
+    const fetchFn = (async (u: RequestInfo | URL, i?: RequestInit) => (busy-- > 0 ? new Response("busy", { status: 502 }) : ok(u, i))) as typeof fetch;
+    const dry = await runCensus(pool, { city: "indore", dryRun: true, fetchFn, retryDelayMs: 0 });
     expect(dry).toMatchObject({ placesFound: 2, added: 0 });
     const rep = await runCensus(pool, { city: "indore", fetchFn });
     expect(rep).toMatchObject({ placesFound: 2, added: 2, linked: 1, byType: { auditorium: 1, club_bar: 1 } });
@@ -349,6 +352,7 @@ describe("public Facebook events", () => {
     expect(dry.status).toBe("no Facebook pages on record yet"); // a dry run adds nothing, not even pages
     const rep = await fetchFacebookEvents(pool, apify, llm, { jobName: "test", city: "indore" });
     expect(rep).toMatchObject({ pagesAdded: 1, pagesChecked: 1, eventsReturned: 2, skipped: 1, newEvents: 1, eventsExtracted: 1 });
+    expect(rep.skipReasons).toEqual(["online event: Online webinar"]);
     expect(apify.calls[0]).toMatchObject({ actorId: "apify/facebook-events-scraper", input: { startUrls: [{ url: "https://www.facebook.com/fleamarketindore/upcoming_hosted_events" }], maxEvents: 8 } });
     expect(llm.texts[0]).toContain("Venue: Lalbagh Palace");
     const cost = (await pool.query("SELECT sub_budget, estimated_usd FROM cost_log WHERE NOT dry_run")).rows;

@@ -79,7 +79,7 @@ export async function runDiscovery(
     const cap = Math.min(opts.maxPosts ?? cfg.maxPostsPerWeek, cfg.maxPostsPerWeek);
     const perUrl = Math.max(1, Math.floor(cap / urls.length));
     const maxItems = perUrl * urls.length;
-    const due = opts.force || await claimFetch(pool, `discovery:${city.slug}`, cfg.everyHours, !!opts.dryRun);
+    const due = await claimFetch(pool, `discovery:${city.slug}`, opts.force ? 0 : cfg.everyHours, !!opts.dryRun);
     if (!due) { rep.status = "not due (weekly)"; continue; }
 
     const estimate = maxItems * apifyCfg.usdPerPost;

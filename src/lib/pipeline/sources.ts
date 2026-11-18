@@ -34,7 +34,7 @@ function claimDailyFetch(pool: Pool, key: string, dryRun: boolean): Promise<bool
 /** True if this source has not been fetched in the last `hours`; records the fetch (not in a dry run). */
 export async function claimFetch(pool: Pool, key: string, hours: number, dryRun: boolean): Promise<boolean> {
   const { rows } = await pool.query<{ due: boolean }>(
-    "SELECT (last_fetched_at IS NULL OR last_fetched_at < now() - make_interval(secs => $2)) AS due FROM source_state WHERE source_key = $1",
+    "SELECT (last_fetched_at IS NULL OR last_fetched_at <= now() - make_interval(secs => $2)) AS due FROM source_state WHERE source_key = $1",
     [key, hours * 3600]);
   if (rows[0] && !rows[0].due) return false;
   if (!dryRun) {
