@@ -161,7 +161,7 @@ export interface SubmissionRow {
   id: number; token: string; channel: "form" | "poster" | "admin" | "email"; status: "draft" | "pending" | "approved" | "rejected";
   city_id: number | null; fields: SubmissionFields; submitter: Submitter; screening: Screening | null;
   form_errors: Partial<Record<string, FieldError>> | null; poster_id: number | null; event_id: number | null;
-  created_at: Date; submitted_at: Date | null;
+  created_at: Date; updated_at: Date; submitted_at: Date | null;
 }
 
 export async function createDraft(
