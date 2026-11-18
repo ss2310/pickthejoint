@@ -1,34 +1,48 @@
-/** Date and time formatting for pages. Everything is shown in the city's timezone (hard rule 7). */
+/**
+ * Date and time formatting for pages. Everything is shown in the city's
+ * timezone (hard rule 7) and in the language of the page being rendered;
+ * pass `locale` to choose a language outside a page render.
+ */
+import type { Locale } from "../config";
+import { getLocale } from "./locale";
 
 const fmt = (timeZone: string, opts: Intl.DateTimeFormatOptions, locale = "en-IN") =>
   new Intl.DateTimeFormat(locale, { timeZone, ...opts });
 
+/** Hindi dates use Hindi month and weekday names with ordinary (0-9) digits. */
+const DATES: Record<Locale, string> = { en: "en-GB", hi: "hi-IN-u-nu-latn" };
+
 /** "Saturday, 21 November 2026" */
-export function longDate(d: Date, timeZone: string): string {
-  return fmt(timeZone, { weekday: "long", day: "numeric", month: "long", year: "numeric" }, "en-GB").format(d);
+export function longDate(d: Date, timeZone: string, locale: Locale = getLocale()): string {
+  return fmt(timeZone, { weekday: "long", day: "numeric", month: "long", year: "numeric" }, DATES[locale]).format(d);
+}
+
+/** "21 November 2026" */
+export function plainDate(d: Date, timeZone: string, locale: Locale = getLocale()): string {
+  return fmt(timeZone, { day: "numeric", month: "long", year: "numeric" }, DATES[locale]).format(d);
 }
 
 /** "Sat 21 Nov" */
-export function shortDate(d: Date, timeZone: string): string {
-  return fmt(timeZone, { weekday: "short", day: "numeric", month: "short" }, "en-GB").format(d).replace(",", "");
+export function shortDate(d: Date, timeZone: string, locale: Locale = getLocale()): string {
+  return fmt(timeZone, { weekday: "short", day: "numeric", month: "short" }, DATES[locale]).format(d).replace(",", "");
 }
 
 /** The pieces of a date tile: { weekday: "Sat", day: "21", month: "Nov" } */
-export function dateParts(d: Date, timeZone: string): { weekday: string; day: string; month: string } {
-  const parts = fmt(timeZone, { weekday: "short", day: "numeric", month: "short" }, "en-GB").formatToParts(d);
+export function dateParts(d: Date, timeZone: string, locale: Locale = getLocale()): { weekday: string; day: string; month: string } {
+  const parts = fmt(timeZone, { weekday: "short", day: "numeric", month: "short" }, DATES[locale]).formatToParts(d);
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
   return { weekday: get("weekday"), day: get("day"), month: get("month") };
 }
 
-/** "8:00 PM" */
-export function clock(d: Date, timeZone: string): string {
-  return fmt(timeZone, { hour: "numeric", minute: "2-digit", hour12: true }, "en-US").format(d);
+/** "8:00 PM"; in Hindi "रात 8:00 बजे" style as the platform writes it. */
+export function clock(d: Date, timeZone: string, locale: Locale = getLocale()): string {
+  return fmt(timeZone, { hour: "numeric", minute: "2-digit", hour12: true }, locale === "hi" ? DATES.hi : "en-US").format(d);
 }
 
 /** "18 November 2026, 9:05 AM IST" */
-export function stamp(d: Date, timeZone: string): string {
+export function stamp(d: Date, timeZone: string, locale: Locale = getLocale()): string {
   const zone = timeZone === "Asia/Kolkata" ? "IST" : timeZone;
-  return `${fmt(timeZone, { day: "numeric", month: "long", year: "numeric" }, "en-GB").format(d)}, ${clock(d, timeZone)} ${zone}`;
+  return `${plainDate(d, timeZone, locale)}, ${clock(d, timeZone, locale)} ${zone}`;
 }
 
 /** "YYYY-MM-DD" as seen in the timezone. */
@@ -59,8 +73,8 @@ export function weekdayOf(isoDate: string): number {
 }
 
 /** Human date for a "YYYY-MM-DD" value: "Saturday, 21 November 2026". */
-export function longDay(isoDate: string): string {
-  return longDate(new Date(`${isoDate}T12:00:00Z`), "UTC");
+export function longDay(isoDate: string, locale: Locale = getLocale()): string {
+  return longDate(new Date(`${isoDate}T12:00:00Z`), "UTC", locale);
 }
 
 export function plural(n: number, one: string, many = `${one}s`): string {

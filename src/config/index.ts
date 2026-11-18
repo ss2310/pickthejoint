@@ -101,18 +101,21 @@ export const budgets = {
   newsCalendars: num("NEWS_CALENDARS_BUDGET_USD", 5),
   /** Sub-limit inside "model" for entity enrichment: research with web search, and the page text. */
   enrichment: num("ENRICHMENT_BUDGET_USD", 20),
+  /** Sub-limit inside "model" for translating page text into Hindi. */
+  translation: num("TRANSLATION_BUDGET_USD", 5),
   /** Fraction of a cap at which a warning is logged. */
   warnAt: 0.8,
 } as const;
 
 export type BudgetBucket = "scrape" | "model";
-export type SubBudget = "reelTranscript" | "googleEvents" | "newsCalendars" | "enrichment";
+export type SubBudget = "reelTranscript" | "googleEvents" | "newsCalendars" | "enrichment" | "translation";
 
 export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   reelTranscript: "scrape",
   googleEvents: "scrape",
   newsCalendars: "model",
   enrichment: "model",
+  translation: "model",
 };
 
 /**
@@ -202,6 +205,18 @@ export const webSources = {
 export const locales = ["en", "hi"] as const;
 export type Locale = (typeof locales)[number];
 export const defaultLocale: Locale = "en";
+
+/**
+ * Hindi translation (Prompt 5). New and changed text is translated at the end
+ * of the ingest and enrich jobs once TRANSLATION=on is set on those services;
+ * `npm run translate:backfill` does the same on demand.
+ */
+export const translation = {
+  enabled: process.env.TRANSLATION === "on",
+  /** Short items (names, prices) and long ones (descriptions) share a request up to these limits. */
+  itemsPerRequest: 24,
+  charsPerRequest: 4500,
+} as const;
 
 export const displayTimeZone = "Asia/Kolkata";
 

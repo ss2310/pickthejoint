@@ -11,7 +11,8 @@ export function pageMeta(title: string, description: string, path: string): Meta
 export function Editorial({ title, path, updated, children }: { title: string; path: string; updated: string; children: React.ReactNode }) {
   return (
     <main>
-      <Hero trail={[{ name: "Pick the Joint", path: "/" }, { name: title, path }]} title={title} />
+      {/* These pages are in English only for now; middleware sends their /hi/ addresses here. */}
+      <Hero trail={[{ name: "Pick the Joint", path: "/" }, { name: title, path }]} title={title} oneLanguage />
       <div className="wrap page">
         <div className="prose">
           {children}

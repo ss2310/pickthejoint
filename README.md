@@ -16,6 +16,7 @@ Events discovery site for Indian cities (pickthejoint.com). Project rules live i
 - `npm run job:ingest -- [--dry-run] [--batch] [--handles a,b --force] [--sources instagram,google,news] [--process-only]` — scrape due handles, fetch the other sources, then filter, extract, match and publish
 - `npm run job:housekeeping -- [--dry-run]` — mark finished events as happened and print the daily report
 - `npm run job:enrich -- [--dry-run] [--types venue,artist,organiser] [--limit 5] [--slugs a,b]` — fill in venue, artist and organiser pages from public sources (weekly)
+- `npm run translate:backfill -- [--dry-run] [--batch] [--limit 200]` — translate public text that has no Hindi yet, or whose English has changed
 - `npm run typecheck`, `npm run lint`, `npm run build`
 
 ## Layout
@@ -35,6 +36,16 @@ Scheduled jobs run as separate Railway cron services from the same repo, with th
 - ingest, daily: start command `npm run job:ingest -- --batch`
 - housekeeping, daily: start command `npm run job:housekeeping`
 - enrich, weekly: start command `npm run job:enrich`
+
+## Hindi (Prompt 5)
+English lives at the plain paths; Hindi lives under `/hi/` with the same paths.
+- **Routing:** every page sits under `src/app/[locale]/`. Middleware serves a plain path from `/en/...` without changing the address, sends a typed `/en/...` to the plain path, and leaves `/hi/...` alone. Sitemaps, `robots.txt` and files have no language.
+- **Interface text:** `src/locales/en.ts` and `src/locales/hi.ts` hold every word the site itself says, including the sentences of hub summaries and FAQs. A page calls `setLocale` first; components read the language with `getLocale()` and `messages()` (`src/lib/locale.ts`). Use the `Link` from `src/components/ui.tsx` for links inside the site so they stay in the reader's language.
+- **Stored text:** Hindi for events, venues, artists, organisers, series, areas and cities is in the `translations` table. Queries read it for Hindi pages and fall back to English, field by field, when a translation is missing or the English has changed since.
+- **When text is translated:** never on page load. `src/lib/pipeline/translate.ts` runs at the end of the ingest and enrich jobs when `TRANSLATION=on` is set on those services, and on demand with `npm run translate:backfill`. Names are written in Devanagari as they sound and go first, so longer texts reuse the same spellings. Cost goes to the `translation` sub-budget (`TRANSLATION_BUDGET_USD`, default 5 a month).
+- **Search engines:** each page names its other-language version (`hreflang` en-IN, hi-IN and x-default) in its head and in the sitemaps.
+- **Not translated yet:** the about, how-we-verify, corrections and changelog pages are English only; their `/hi/` addresses redirect to the English page.
+- **Fonts:** the three font files are in `src/fonts` and referenced from `globals.css`, so a build needs no network. `next/font/google` failed intermittently at build time and is not used.
 
 ## Entity enrichment (Prompt 4)
 The weekly `enrich` job works through venues, artists and organisers flagged `needs_enrichment`, most-referenced first, until its per-run budget is used.

@@ -16,6 +16,7 @@
     "job:ingest": "tsx scripts/jobs/ingest.ts",
     "job:housekeeping": "tsx scripts/jobs/housekeeping.ts",
     "job:enrich": "tsx scripts/jobs/enrich.ts",
+    "translate:backfill": "tsx scripts/translate-backfill.ts",
     "railway:release": "npm run db:migrate && npm run db:seed && npm run import:handles -- data/handles-indore.csv --if-empty"
   },
   "dependencies": {

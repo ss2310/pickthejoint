@@ -1,9 +1,16 @@
 /** Shared server components. No client JavaScript anywhere: every page is complete in its HTML. */
-import Link from "next/link";
+import NextLink from "next/link";
+import { locales } from "@/config";
 import { clock, dateParts, stamp } from "@/lib/format";
-import type { Faq } from "@/lib/hubs";
+import { categoryName, type Faq } from "@/lib/hubs";
+import { LANG_TAG, getLocale, localePath, messages } from "@/lib/locale";
 import type { City, EventCard, Named } from "@/lib/queries";
 import { breadcrumbLd, eventPath, faqLd, type Ld } from "@/lib/schema";
+
+/** A link to a page of this site, in the language of the page being rendered. `href` is the plain path. */
+export function Link({ href, ...rest }: Omit<React.ComponentProps<typeof NextLink>, "href"> & { href: string }) {
+  return <NextLink href={localePath(href)} {...rest} />;
+}
 
 /** Structured data. "<" is escaped so no string can close the script element. */
 export function JsonLd({ data }: { data: Ld | Ld[] }) {
@@ -20,7 +27,7 @@ export interface Crumb { name: string; path: string }
 
 export function Breadcrumbs({ trail }: { trail: Crumb[] }) {
   return (
-    <nav aria-label="Breadcrumb" className="crumbs">
+    <nav aria-label={messages().site.breadcrumb} className="crumbs">
       <ol>
         {trail.map((t, i) => (
           <li key={t.path}>{i < trail.length - 1 ? <Link href={t.path}>{t.name}</Link> : <span aria-current="page">{t.name}</span>}</li>
@@ -34,15 +41,26 @@ export function Breadcrumbs({ trail }: { trail: Crumb[] }) {
 /**
  * The band at the top of every page: breadcrumbs, an optional kicker, the page
  * title and whatever introduces the page. `tone` is a category slug; it tints
- * the band with that category's colour.
+ * the band with that category's colour. The last breadcrumb is the page's own
+ * path, which is where the link to the other language points; pages that exist
+ * in one language only pass `oneLanguage`.
  */
-export function Hero({ trail, title, tone, kicker, long, children }: {
-  trail: Crumb[]; title: string; tone?: string | null; kicker?: React.ReactNode; long?: boolean; children?: React.ReactNode;
+export function Hero({ trail, title, tone, kicker, long, oneLanguage, children }: {
+  trail: Crumb[]; title: string; tone?: string | null; kicker?: React.ReactNode; long?: boolean; oneLanguage?: boolean; children?: React.ReactNode;
 }) {
+  const locale = getLocale();
+  const other = locales.find((l) => l !== locale)!;
   return (
     <header className={["hero", tone ? `cat-${tone}` : "", long || title.length > 34 ? "hero-long" : ""].filter(Boolean).join(" ")}>
       <div className="wrap">
-        <Breadcrumbs trail={trail} />
+        <div className="hero-top">
+          <Breadcrumbs trail={trail} />
+          {!oneLanguage && (
+            <a className="lang-switch" href={localePath(trail[trail.length - 1].path, other)} hrefLang={LANG_TAG[other]} lang={LANG_TAG[other]}>
+              {messages().site.switchTo}
+            </a>
+          )}
+        </div>
         {kicker}
         <h1>{title}</h1>
         {children}
@@ -51,20 +69,22 @@ export function Hero({ trail, title, tone, kicker, long, children }: {
   );
 }
 
-/** Up to two initials for a name: "The Yellow Diary" is "YD". */
+/** Up to two initials for a name: "The Yellow Diary" is "YD". Names in other scripts get their first letter. */
 export function initials(name: string): string {
-  const words = name.replace(/^the\s+/i, "").split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-  return (words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? name).slice(0, 2)).toUpperCase();
+  const words = name.replace(/^the\s+/i, "").split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean);
+  const first = (w: string) => Array.from(w)[0] ?? "";
+  if (!/^[\x00-\x7f]*$/.test(name)) return first(words[0] ?? name);
+  return (words.length > 1 ? first(words[0]) + first(words[1]) : (words[0] ?? name).slice(0, 2)).toUpperCase();
 }
 
-const STATUS_LABEL: Record<string, string> = { cancelled: "Cancelled", postponed: "Postponed" };
-
 export function priceLabel(e: Pick<EventCard, "is_free" | "price_text">): string | null {
-  return e.is_free ? "Free entry" : e.price_text;
+  return e.is_free ? messages().common.freeEntry : e.price_text;
 }
 
 export function EventList({ events, empty }: { events: EventCard[]; empty: string }) {
   if (events.length === 0) return empty ? <p className="empty">{empty}</p> : null;
+  const m = messages();
+  const status: Record<string, string> = { cancelled: m.common.cancelled, postponed: m.common.postponed };
   return (
     <ol className="events">
       {events.map((e) => {
@@ -83,8 +103,8 @@ export function EventList({ events, empty }: { events: EventCard[]; empty: strin
                 {e.venue_name && <span>{e.venue_name}{e.area_name ? `, ${e.area_name}` : ""}</span>}
               </p>
               <p className="event-tags">
-                {STATUS_LABEL[e.status] && <strong className="tag tag-warn">{STATUS_LABEL[e.status]}</strong>}
-                {e.category_name && <span className="pill">{e.category_name}</span>}
+                {status[e.status] && <strong className="tag tag-warn">{status[e.status]}</strong>}
+                {e.category_name && <span className="pill">{categoryName({ slug: e.category_slug, name: e.category_name })}</span>}
                 {price && <span className={e.is_free ? "pill pill-free" : "pill pill-plain"}>{price}</span>}
               </p>
             </div>
@@ -99,7 +119,7 @@ export function FaqBlock({ faqs }: { faqs: Faq[] }) {
   if (faqs.length === 0) return null;
   return (
     <section className="faq" aria-labelledby="faq-heading">
-      <h2 id="faq-heading">Questions people ask</h2>
+      <h2 id="faq-heading">{messages().common.faqHeading}</h2>
       <dl>
         {faqs.map((f) => (
           <div key={f.question}>
@@ -116,13 +136,14 @@ export function FaqBlock({ faqs }: { faqs: Faq[] }) {
 /** Links between a city's hubs, shown on every hub page. */
 export function HubNav({ city, categories, current }: { city: City; categories: Named[]; current: string }) {
   const base = `/${city.slug}`;
+  const m = messages().nav;
   const links: { path: string; name: string; tone?: string }[] = [
-    { path: base, name: "This week" }, { path: `${base}/today`, name: "Today" }, { path: `${base}/this-weekend`, name: "This weekend" },
-    ...categories.map((c) => ({ path: `${base}/${c.slug}`, name: c.name, tone: c.slug })),
-    { path: `${base}/past`, name: "Past events" }, { path: `${base}/search`, name: "Search" },
+    { path: base, name: m.thisWeek }, { path: `${base}/today`, name: m.today }, { path: `${base}/this-weekend`, name: m.thisWeekend },
+    ...categories.map((c) => ({ path: `${base}/${c.slug}`, name: categoryName(c), tone: c.slug })),
+    { path: `${base}/past`, name: m.past }, { path: `${base}/search`, name: m.search },
   ];
   return (
-    <nav aria-label={`${city.name} listings`} className="hubnav">
+    <nav aria-label={m.listings(city.name)} className="hubnav">
       <ul>
         {links.map((l) => (
           <li key={l.path} className={l.tone ? `cat-${l.tone}` : undefined}>{l.path === current ? <span aria-current="page">{l.name}</span> : <Link href={l.path}>{l.name}</Link>}</li>
@@ -132,9 +153,13 @@ export function HubNav({ city, categories, current }: { city: City; categories: 
   );
 }
 
-export function Updated({ at, timeZone }: { at: Date | null; timeZone: string }) {
+export function Updated({ at, timeZone, note }: { at: Date | null; timeZone: string; note?: string }) {
   if (!at) return null;
-  return <p className="muted small updated">Updated <time dateTime={at.toISOString()}>{stamp(at, timeZone)}</time>.</p>;
+  return (
+    <p className="muted small updated">
+      {messages().common.updated} <time dateTime={at.toISOString()}>{stamp(at, timeZone)}</time>.{note ? ` ${note}` : ""}
+    </p>
+  );
 }
 
 /**
@@ -143,16 +168,18 @@ export function Updated({ at, timeZone }: { at: Date | null; timeZone: string })
  */
 export function SourceList({ sources }: { sources: { url: string; title: string | null; facts: string[] }[] }) {
   if (sources.length === 0) return null;
+  const m = messages().common;
   const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
+  const label = (fact: string) => { const key = fact.split(":")[0].toLowerCase(); return m.factLabels[key] ?? key; };
   return (
     <section aria-labelledby="sources-heading">
-      <h2 id="sources-heading">Sources for this page</h2>
-      <p className="muted small">Each fact above was taken from the pages listed here and written in our own words.</p>
+      <h2 id="sources-heading">{m.sourcesHeading}</h2>
+      <p className="muted small">{m.sourcesNote}</p>
       <ul className="links">
         {sources.map((s) => (
           <li key={s.url}>
             <a href={s.url} rel="noopener nofollow">{s.title ?? host(s.url)}</a> ({host(s.url)})
-            {s.facts.length > 0 && <span className="muted small">. Used for: {s.facts.map((f) => f.split(":")[0].toLowerCase()).filter((f, i, all) => all.indexOf(f) === i).join(", ")}.</span>}
+            {s.facts.length > 0 && <span className="muted small">. {m.usedFor}: {s.facts.map(label).filter((f, i, all) => all.indexOf(f) === i).join(", ")}.</span>}
           </li>
         ))}
       </ul>
