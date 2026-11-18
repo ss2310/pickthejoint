@@ -1,12 +1,15 @@
 /**
  * Daily housekeeping. No paid calls.
- *   - marks events whose end has passed as "happened" (nothing is ever deleted);
+ *   - merges duplicate venues and duplicate listings of the same event (dedupe.ts);
+ *   - marks events whose end has passed as "happened" (past events are never deleted);
  *   - reports the last day's activity and the month's spend.
  */
 import type { Pool } from "pg";
+import { mergeDuplicates } from "./dedupe";
 
 export async function housekeeping(pool: Pool, opts: { dryRun?: boolean; now?: Date } = {}) {
   const now = opts.now ?? new Date();
+  const duplicates = await mergeDuplicates(pool, { dryRun: opts.dryRun });
   // Without an end time an event is over 6 hours after it starts, or at the
   // end of its day when no start time was stated either.
   const ended = `coalesce(ends_at, CASE WHEN start_time_known THEN starts_at + interval '6 hours' ELSE starts_at + interval '1 day' END) < $1`;
@@ -17,6 +20,7 @@ export async function housekeeping(pool: Pool, opts: { dryRun?: boolean; now?: D
   const one = async (sql: string) => Number((await pool.query<{ n: number }>(sql, [now])).rows[0].n);
   const since = "$1::timestamptz - interval '24 hours'";
   return {
+    duplicates,
     eventsMarkedHappened: marked,
     last24Hours: {
       postsFetched: await one(`SELECT count(*) AS n FROM raw_posts WHERE fetched_at >= ${since}`),
