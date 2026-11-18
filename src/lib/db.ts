@@ -1,4 +1,7 @@
-import { Pool, type PoolClient } from "pg";
+import { Pool, types, type PoolClient } from "pg";
+
+// bigint (int8) columns are row IDs and counts, all far below 2^53: read them as numbers, not strings.
+types.setTypeParser(20, Number);
 
 let pool: Pool | undefined;
 

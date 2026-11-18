@@ -29,11 +29,59 @@ export const models = {
 
 export type ModelTier = keyof typeof models;
 
-/** Apify actors. Set the real IDs from the Apify console. */
+/**
+ * List prices in USD per million tokens, used to estimate and log model spend.
+ * Checked against Anthropic's pricing on 2026-11-18; re-check when changing models.
+ * A model missing from this table is costed at the most expensive rate here.
+ */
+export const modelPricing: Record<string, { inputPerMTok: number; outputPerMTok: number }> = {
+  "claude-haiku-5-5": { inputPerMTok: 0.1, outputPerMTok: 0.5 },
+  "claude-sonnet-5-5": { inputPerMTok: 2, outputPerMTok: 10 },
+  "claude-opus-5-5": { inputPerMTok: 4, outputPerMTok: 20 },
+};
+/** The Message Batches API bills at half the list price. */
+export const batchDiscount = 0.5;
+
+/**
+ * Apify actors. IDs come from the environment (the shorter names are accepted
+ * as aliases). Prices are per result, as listed on each actor's store page;
+ * override them if the actor's price changes.
+ */
 export const apify = {
-  instagramPostsActorId: process.env.APIFY_IG_POSTS_ACTOR_ID ?? "",
+  instagramPostsActorId: process.env.APIFY_IG_POSTS_ACTOR_ID ?? process.env.APIFY_ACTOR_ID ?? "",
   instagramPostsFallbackActorId: process.env.APIFY_IG_POSTS_FALLBACK_ACTOR_ID ?? "",
-  reelTranscriptActorId: process.env.APIFY_REEL_TRANSCRIPT_ACTOR_ID ?? "",
+  reelTranscriptActorId: process.env.APIFY_REEL_TRANSCRIPT_ACTOR_ID ?? process.env.APIFY_TRANSCRIPT_ACTOR_ID ?? "",
+  usdPerPost: num("APIFY_USD_PER_POST", 0.0027),
+  usdPerTranscript: num("APIFY_USD_PER_TRANSCRIPT", 0.03),
+} as const;
+
+/** Ingestion tunables (Prompt 2). */
+export const ingestion = {
+  /** Latest posts fetched per handle per check. */
+  postsPerHandle: 3,
+  /** Tier A handles checked per city per day at most. */
+  tierAMaxPerCity: 50,
+  /** A little under a day / a week, so a cron that drifts still picks handles up. */
+  tierAIntervalHours: 20,
+  tierBIntervalHours: 6.5 * 24,
+  /** How far back to look the first time a handle is checked. */
+  firstCheckLookbackDays: 30,
+  /** Handles sent to the actor in one run. */
+  handlesPerActorRun: 25,
+  /** Title, date and venue must all reach this to publish (hard rule 3). */
+  publishConfidence: 0.8,
+  /** Below this, a fast-tier answer is treated as unsure and escalated. */
+  fastTierMinConfidence: 0.7,
+  /** Poster images sent to the vision model per post. */
+  maxImagesPerPost: 2,
+  maxImageBytes: 4_500_000,
+  /** Title similarity (0..1): at or above `same` is the same event, below `different` is not. */
+  titleSimilarity: { same: 0.6, different: 0.25 },
+  /** Added to an event's confidence when a second independent source confirms it. */
+  secondSourceBoost: 0.1,
+  /** Minutes to wait for a Message Batch before the job gives up. */
+  batchMaxWaitMinutes: 120,
+  description: { minWords: 60, maxWords: 120 },
 } as const;
 
 /**
@@ -47,16 +95,61 @@ export const budgets = {
   model: num("MODEL_BUDGET_USD", 60),
   /** Sub-limit inside "scrape" so transcripts can never crowd out scraping. */
   reelTranscript: num("REEL_TRANSCRIPT_BUDGET_USD", 3),
+  /** Sub-limit inside "scrape" for Google event result queries. */
+  googleEvents: num("GOOGLE_EVENTS_BUDGET_USD", 3),
+  /** Sub-limit inside "model" for reading local news event roundups. */
+  newsCalendars: num("NEWS_CALENDARS_BUDGET_USD", 5),
   /** Fraction of a cap at which a warning is logged. */
   warnAt: 0.8,
 } as const;
 
 export type BudgetBucket = "scrape" | "model";
-export type SubBudget = "reelTranscript";
+export type SubBudget = "reelTranscript" | "googleEvents" | "newsCalendars";
 
 export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   reelTranscript: "scrape",
+  googleEvents: "scrape",
+  newsCalendars: "model",
 };
+
+/**
+ * Launch sources beyond Instagram (Prompt 2, step 8). Each has its own monthly
+ * limit in `budgets` and its own line in the run report.
+ */
+export const webSources = {
+  google: {
+    /** DataForSEO Google organic SERP (live); events come from the "events" block of the result page. */
+    usdPerQuery: num("GOOGLE_EVENTS_USD_PER_QUERY", 0.002),
+    /** {city} is replaced with the city name. One request per query per day. */
+    queries: [
+      "events in {city} this week",
+      "{city} events this weekend",
+      "live music in {city}",
+      "comedy shows in {city}",
+      "workshops in {city} this week",
+    ],
+  },
+  news: {
+    /**
+     * Keys of the news sources that are switched on, comma-separated, e.g. "fpj,patrika".
+     * Empty by default: a source is only fetched once its terms have been reviewed
+     * (see docs/sources.md). robots.txt is checked again on every run.
+     */
+    enabled: (process.env.NEWS_SOURCES ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
+    userAgent: "PickTheJointBot/1.0 (+https://pickthejoint.com/about)",
+    /** Roundup articles read per source per day. */
+    maxArticlesPerDay: 3,
+    /** Pause between requests to the same site. */
+    delayMs: 5000,
+    maxArticleChars: 9000,
+    sources: [
+      { key: "fpj", name: "Free Press Journal (Indore)", city: "indore", sectionUrl: "https://www.freepressjournal.in/indore",
+        articlePattern: "^https://www\\.freepressjournal\\.in/indore/[a-z0-9-]+$" },
+      { key: "patrika", name: "Patrika (Indore)", city: "indore", sectionUrl: "https://www.patrika.com/indore-news",
+        articlePattern: "^https://www\\.patrika\\.com/indore-news/[a-z0-9-]+$" },
+    ],
+  },
+} as const;
 
 export const locales = ["en", "hi"] as const;
 export type Locale = (typeof locales)[number];
