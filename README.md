@@ -15,6 +15,7 @@ Events discovery site for Indian cities (pickthejoint.com). Project rules live i
 - `npm run import:handles -- data/handles.csv [--dry-run]` — CSV columns `handle,type,city,tier`
 - `npm run job:ingest -- [--dry-run] [--batch] [--handles a,b --force] [--sources instagram,google,news] [--process-only]` — scrape due handles, fetch the other sources, then filter, extract, match and publish
 - `npm run job:housekeeping -- [--dry-run]` — mark finished events as happened and print the daily report
+- `npm run job:enrich -- [--dry-run] [--types venue,artist,organiser] [--limit 5] [--slugs a,b]` — fill in venue, artist and organiser pages from public sources (weekly)
 - `npm run typecheck`, `npm run lint`, `npm run build`
 
 ## Layout
@@ -22,7 +23,7 @@ Events discovery site for Indian cities (pickthejoint.com). Project rules live i
 - `src/lib/budget-guard.ts` — every paid call goes through `guardedCall`
 - `db/migrations/` — plain SQL, applied in order by `scripts/migrate.ts`
 - `db/seed.ts` — cities, areas, categories (idempotent)
-- `src/lib/pipeline/` — ingestion: `scrape` (Apify), `filter` (keyword rules, then fast model), `extract` (poster reading), `resolve` (matching, dedup, review queue), `write` (descriptions), `sources` (Google results, news roundups), `housekeeping`
+- `src/lib/pipeline/` — ingestion: `scrape` (Apify), `filter` (keyword rules, then fast model), `extract` (poster reading), `resolve` (matching, dedup, review queue), `write` (descriptions), `sources` (Google results, news roundups), `housekeeping`, `enrich` and `research` (entity pages)
 - `scripts/jobs/` — entry points for the Railway cron services
 - `docs/sources.md` — what each source costs and which are switched on
 
@@ -33,6 +34,16 @@ Set `DATABASE_URL` to the Railway Postgres reference variable on the web service
 Scheduled jobs run as separate Railway cron services from the same repo, with the same variables as `web` and no pre-deploy command:
 - ingest, daily: start command `npm run job:ingest -- --batch`
 - housekeeping, daily: start command `npm run job:housekeeping`
+- enrich, weekly: start command `npm run job:enrich`
+
+## Entity enrichment (Prompt 4)
+The weekly `enrich` job works through venues, artists and organisers flagged `needs_enrichment`, most-referenced first, until its per-run budget is used.
+- **Where facts come from:** the entity's own Instagram bio (read through Apify, scrape budget), then research by the mid-tier model with Anthropic's web search and web fetch tools (`enrichment` sub-budget inside the model budget; `ENRICHMENT_BUDGET_USD`, default 20 a month, a quarter of it per run).
+- **What is kept:** a fact is accepted only if its source is a page the research tools really returned. A fact resting on one weak source (listing sites, pages anyone can edit: the list is in `src/config/index.ts`) is left out; two weak sources that agree are accepted. Facts the model is unsure of go to `review_queue` as `entity_fact`. Private facts about people are dropped and never stored.
+- **What is stored:** every accepted fact is a row in `entity_sources` with its source address, and the page lists its sources with what each was used for. The page text is written from the accepted facts only.
+- **When there is too little:** an artist or organiser with fewer than two facts keeps its `noindex` stub page. An entity we cannot tell apart from a namesake goes to review and is not retried.
+- **Maps:** a venue that gains an address is sent to the geocoder again.
+- **One-off runs:** set `ENRICH_ARGS` on the service (for example `--types venue --limit 5`, or `--slugs ohlio` to redo one page) for a single run, then remove it.
 
 ## Indexing, trust and alerts (Prompt 3b)
 - **IndexNow:** the key file is `public/d632b94e7b1106de3376c2c8b5b6b82b.txt`. Both jobs ping IndexNow with the pages that changed, when `INDEXNOW=on`.

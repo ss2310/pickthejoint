@@ -43,6 +43,19 @@ export async function changedPaths(pool: Pool, since: Date | null): Promise<stri
     for (const s of r.artists ?? []) paths.add(`/artists/${s}`);
     for (const s of r.organisers ?? []) paths.add(`/organisers/${s}`);
   }
+  // Venue, artist and organiser pages filled in by enrichment since the last ping.
+  if (since) {
+    const enriched = await pool.query<{ path: string }>(
+      `SELECT '/' || c.slug || '/venues/' || v.slug AS path FROM venues v JOIN cities c ON c.id = v.city_id
+       WHERE c.is_live AND v.enriched_at > $1 AND EXISTS (SELECT 1 FROM events e WHERE e.venue_id = v.id AND e.is_published)
+       UNION ALL
+       SELECT '/artists/' || p.slug FROM artists p WHERE p.enriched_at > $1 AND p.bio IS NOT NULL
+         AND EXISTS (SELECT 1 FROM event_artists j JOIN events e ON e.id = j.event_id WHERE j.artist_id = p.id AND e.is_published)
+       UNION ALL
+       SELECT '/organisers/' || p.slug FROM organisers p WHERE p.enriched_at > $1 AND p.bio IS NOT NULL
+         AND EXISTS (SELECT 1 FROM event_organisers j JOIN events e ON e.id = j.event_id WHERE j.organiser_id = p.id AND e.is_published)`, [since]);
+    for (const r of enriched.rows) paths.add(r.path);
+  }
   return [...paths];
 }
 

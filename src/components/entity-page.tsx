@@ -4,7 +4,7 @@ import { displayTimeZone } from "@/config";
 import { plural, stamp } from "@/lib/format";
 import { listEvents, type EventCard, type PersonDetail } from "@/lib/queries";
 import { ids, officialLinks, pageLd, type Ld } from "@/lib/schema";
-import { Breadcrumbs, EventList, ExternalLinks, JsonLd } from "./ui";
+import { Breadcrumbs, EventList, ExternalLinks, JsonLd, SourceList } from "./ui";
 
 export interface EntityKind {
   /** "artists" | "organisers" */
@@ -43,6 +43,7 @@ export async function EntityPage({ kind, p }: { kind: EntityKind; p: PersonDetai
   const links = officialLinks(p.official_links, p.same_as);
   const modified = [...upcoming, ...past].reduce((max, e) => (e.updated_at > max ? e.updated_at : max), p.updated_at);
   const descriptor = [p.genre, p.hometown ? `from ${p.hometown}` : null].filter(Boolean).join(", ");
+  const works = p.notable_works ?? [];
 
   return (
     <main>
@@ -51,6 +52,12 @@ export async function EntityPage({ kind, p }: { kind: EntityKind; p: PersonDetai
       <p className="lead">
         {p.bio ?? `${p.name} ${kind.base === "artists" ? "has appeared at" : "has organised"} ${plural(upcoming.length + past.length, "event")} listed on Pick the Joint${descriptor ? ` (${descriptor})` : ""}. A fuller profile will be added once it can be sourced.`}
       </p>
+      {(p.genre || p.hometown) && (
+        <dl className="facts">
+          {p.genre && <div><dt>Genre or form</dt><dd>{p.genre}</dd></div>}
+          {p.hometown && <div><dt>From</dt><dd>{p.hometown}</dd></div>}
+        </dl>
+      )}
 
       <section aria-labelledby="upcoming-heading">
         <h2 id="upcoming-heading">Upcoming events</h2>
@@ -59,15 +66,21 @@ export async function EntityPage({ kind, p }: { kind: EntityKind; p: PersonDetai
       {past.length > 0 && (
         <section aria-labelledby="past-heading"><h2 id="past-heading">Past events</h2><EventList events={past} empty="" /></section>
       )}
+      {works.length > 0 && (
+        <section aria-labelledby="works-heading">
+          <h2 id="works-heading">Notable work</h2>
+          <p className="muted small">Each title links to the work on its official platform. Nothing is hosted here.</p>
+          <ul className="links">
+            {works.map((w) => (
+              <li key={w.url}><a href={w.url} rel="noopener">{w.title}</a>{w.year ? ` (${w.year})` : ""}, on {w.platform}</li>
+            ))}
+          </ul>
+        </section>
+      )}
       {links.length > 0 && (
         <section aria-labelledby="links-heading"><h2 id="links-heading">Official links</h2><ExternalLinks links={links} /></section>
       )}
-      {p.sources.length > 0 && (
-        <section aria-labelledby="sources-heading">
-          <h2 id="sources-heading">Sources for this page</h2>
-          <ul className="links">{p.sources.map((s) => <li key={s.url}><a href={s.url} rel="noopener nofollow">{s.title ?? s.url}</a></li>)}</ul>
-        </section>
-      )}
+      <SourceList sources={p.sources} />
       <p className="muted small updated">
         Updated <time dateTime={modified.toISOString()}>{stamp(modified, displayTimeZone)}</time>.
         {" "}Only professional, public facts are listed here.

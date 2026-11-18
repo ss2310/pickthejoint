@@ -99,18 +99,66 @@ export const budgets = {
   googleEvents: num("GOOGLE_EVENTS_BUDGET_USD", 3),
   /** Sub-limit inside "model" for reading local news event roundups. */
   newsCalendars: num("NEWS_CALENDARS_BUDGET_USD", 5),
+  /** Sub-limit inside "model" for entity enrichment: research with web search, and the page text. */
+  enrichment: num("ENRICHMENT_BUDGET_USD", 20),
   /** Fraction of a cap at which a warning is logged. */
   warnAt: 0.8,
 } as const;
 
 export type BudgetBucket = "scrape" | "model";
-export type SubBudget = "reelTranscript" | "googleEvents" | "newsCalendars";
+export type SubBudget = "reelTranscript" | "googleEvents" | "newsCalendars" | "enrichment";
 
 export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   reelTranscript: "scrape",
   googleEvents: "scrape",
   newsCalendars: "model",
+  enrichment: "model",
 };
+
+/**
+ * Entity enrichment (Prompt 4): the weekly job that fills in venue, artist and
+ * organiser pages from public sources.
+ */
+export const enrichment = {
+  /** A run stops starting new entities once it has spent this much (a quarter of the monthly limit by default). */
+  perRunUsd: num("ENRICHMENT_RUN_BUDGET_USD", budgets.enrichment / 4),
+  /** Entities of each type a run takes on at most, most-referenced first. */
+  perRunLimit: { venue: 8, artist: 8, organiser: 4 },
+  /** Reserved against the budget before an entity's research call; replaced by the measured cost. */
+  estResearchUsd: 0.25,
+  /** Anthropic's web search tool is billed per search, on top of tokens. Checked 2026-11-18. */
+  usdPerSearch: 0.01,
+  maxSearches: 4,
+  maxFetches: 3,
+  /** Tokens of each fetched page the model is given. */
+  maxFetchTokens: 6000,
+  /** A fact below this confidence goes to the review queue, not onto the page. */
+  minConfidence: 0.7,
+  /** Fewer accepted facts than this and no text is written: the page stays a stub. */
+  minFactsForText: 2,
+  text: { minWords: 30, maxWords: 110 },
+  /** Apify actor that reads an Instagram profile's own bio (the entity's first-party source). */
+  profileActorId: process.env.APIFY_IG_PROFILE_ACTOR_ID ?? "apify/instagram-scraper",
+  usdPerProfile: num("APIFY_USD_PER_PROFILE", apify.usdPerPost),
+  /**
+   * Sources that anyone can edit or that list businesses unchecked. A fact that
+   * rests on just one of these is left out; two that agree are accepted.
+   */
+  weakDomains: [
+    "justdial.com", "sulekha.com", "magicpin.in", "tripadvisor.com", "tripadvisor.in", "quora.com", "reddit.com", "pinterest.com",
+    "facebook.com", "x.com", "twitter.com", "linkedin.com", "medium.com", "blogspot.com", "wordpress.com", "wikipedia.org",
+    "fandom.com", "yelp.com", "foursquare.com", "indiamart.com", "tradeindia.com", "wanderlog.com", "restaurant-guru.in",
+    "restaurantguru.com", "nearbuy.com", "dineout.co.in", "eazydiner.com", "zomato.com", "swiggy.com", "mouthshut.com",
+    "wedmegood.com", "venuelook.com", "weddingwire.in", "allevents.in", "eventbrite.com", "townscript.com", "imdb.com",
+  ],
+  /** Official platforms an artist's notable works may link out to. Host suffix to display name. */
+  workPlatforms: {
+    "youtube.com": "YouTube", "youtu.be": "YouTube", "music.youtube.com": "YouTube Music", "spotify.com": "Spotify",
+    "music.apple.com": "Apple Music", "jiosaavn.com": "JioSaavn", "gaana.com": "Gaana", "soundcloud.com": "SoundCloud",
+    "bandcamp.com": "Bandcamp", "music.amazon.in": "Amazon Music", "primevideo.com": "Prime Video", "netflix.com": "Netflix",
+    "hotstar.com": "JioHotstar", "sonyliv.com": "SonyLIV", "zee5.com": "ZEE5",
+  } as Record<string, string>,
+} as const;
 
 /**
  * Launch sources beyond Instagram (Prompt 2, step 8). Each has its own monthly

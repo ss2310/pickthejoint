@@ -107,6 +107,29 @@ export function Updated({ at, timeZone }: { at: Date | null; timeZone: string })
   return <p className="muted small updated">Updated <time dateTime={at.toISOString()}>{stamp(at, timeZone)}</time>.</p>;
 }
 
+/**
+ * The pages an entity page draws on, each with the facts taken from it, so a
+ * reader (or a crawler) can trace every statement to where it came from.
+ */
+export function SourceList({ sources }: { sources: { url: string; title: string | null; facts: string[] }[] }) {
+  if (sources.length === 0) return null;
+  const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
+  return (
+    <section aria-labelledby="sources-heading">
+      <h2 id="sources-heading">Sources for this page</h2>
+      <p className="muted small">Each fact above was taken from the pages listed here and written in our own words.</p>
+      <ul className="links">
+        {sources.map((s) => (
+          <li key={s.url}>
+            <a href={s.url} rel="noopener nofollow">{s.title ?? host(s.url)}</a> ({host(s.url)})
+            {s.facts.length > 0 && <span className="muted small">. Used for: {s.facts.map((f) => f.split(":")[0].toLowerCase()).filter((f, i, all) => all.indexOf(f) === i).join(", ")}.</span>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function ExternalLinks({ links }: { links: string[] }) {
   if (links.length === 0) return null;
   const label = (u: string) => {

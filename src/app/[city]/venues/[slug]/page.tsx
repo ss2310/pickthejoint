@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Breadcrumbs, EventList, ExternalLinks, JsonLd } from "@/components/ui";
+import { Breadcrumbs, EventList, ExternalLinks, JsonLd, SourceList } from "@/components/ui";
 import { plural, stamp } from "@/lib/format";
 import { getVenue, listEvents } from "@/lib/queries";
 import { ids, officialLinks, pageLd, venueLd, venuePath } from "@/lib/schema";
@@ -38,7 +38,7 @@ export default async function VenuePage({ params }: Props) {
       <Breadcrumbs trail={[{ name: v.city_name, path: `/${v.city_slug}` }, { name: v.name, path }]} />
       <h1>{v.name}</h1>
       <p className="lead">
-        {v.name} is a venue in {v.area_name ? `${v.area_name}, ` : ""}{v.city_name}, {v.city_state}.{" "}
+        {v.name} is {v.venue_type ? `${/^[aeiou]/i.test(v.venue_type) ? "an" : "a"} ${v.venue_type}` : "a venue"} in {v.area_name ? `${v.area_name}, ` : ""}{v.city_name}, {v.city_state}.{" "}
         {upcoming.length ? `${plural(upcoming.length, "upcoming event")} ${upcoming.length === 1 ? "is" : "are"} listed here.` : "No upcoming events are listed here at the moment."}
       </p>
 
@@ -46,6 +46,7 @@ export default async function VenuePage({ params }: Props) {
         {v.address && <div><dt>Address</dt><dd>{v.address}</dd></div>}
         {v.area_name && <div><dt>Area</dt><dd><Link href={`/${v.city_slug}/area/${v.area_slug}`}>{v.area_name}</Link></dd></div>}
         <div><dt>Map</dt><dd><a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`} rel="noopener">Open in Google Maps</a></dd></div>
+        {v.landmarks && <div><dt>Nearest landmarks</dt><dd>{v.landmarks}</dd></div>}
         {v.how_to_reach && <div><dt>How to reach</dt><dd>{v.how_to_reach}</dd></div>}
         {v.parking && <div><dt>Parking</dt><dd>{v.parking}</dd></div>}
         {v.capacity != null && <div><dt>Capacity</dt><dd>About {v.capacity.toLocaleString("en-IN")} people</dd></div>}
@@ -67,6 +68,7 @@ export default async function VenuePage({ params }: Props) {
       {officialLinks(v.official_links, v.same_as).length > 0 && (
         <section aria-labelledby="links-heading"><h2 id="links-heading">Official links</h2><ExternalLinks links={officialLinks(v.official_links, v.same_as)} /></section>
       )}
+      <SourceList sources={v.sources} />
       <p className="muted small updated">Updated <time dateTime={modified.toISOString()}>{stamp(modified, v.timezone)}</time>.</p>
       <JsonLd data={[venueLd(v), pageLd(path, v.name, modified, ids.venue(v.city_slug, v.slug))]} />
     </main>
