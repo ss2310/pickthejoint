@@ -52,7 +52,7 @@ export const apify = {
   instagramPostsFallbackActorId: process.env.APIFY_IG_POSTS_FALLBACK_ACTOR_ID ?? "",
   reelTranscriptActorId: process.env.APIFY_REEL_TRANSCRIPT_ACTOR_ID ?? process.env.APIFY_TRANSCRIPT_ACTOR_ID ?? "",
   usdPerPost: num("APIFY_USD_PER_POST", 0.0027),
-  usdPerTranscript: num("APIFY_USD_PER_TRANSCRIPT", 0.03),
+  usdPerTranscript: num("APIFY_USD_PER_TRANSCRIPT", 0.015),
 } as const;
 
 /** Ingestion tunables (Prompt 2). */
