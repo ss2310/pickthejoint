@@ -1,0 +1,39 @@
+{
+  "_note": "The fixed citation questions (Prompt 8), approved by the owner on 18 Nov 2026. Keep them unchanged so weeks stay comparable; a changed question is a new question. db/seed.ts loads this file into citation_queries.",
+  "indore": {
+    "en": [
+      "What's happening in Indore this weekend?",
+      "What events are on in Indore today?",
+      "What are the best things to do in Indore this week?",
+      "Comedy shows in Indore",
+      "Live music in Indore tonight",
+      "Concerts in Indore this month",
+      "Free events in Indore this weekend",
+      "Workshops in Indore this week",
+      "Theatre and plays in Indore",
+      "Stand-up comedy in Indore this weekend",
+      "Events in Vijay Nagar, Indore",
+      "Things to do with kids in Indore this weekend",
+      "Nightlife and parties in Indore this Saturday",
+      "Cultural and religious events in Indore this week",
+      "Where can I find a list of upcoming events in Indore?"
+    ],
+    "hi": [
+      "इंदौर में इस वीकेंड क्या हो रहा है?",
+      "आज इंदौर में कौन-कौन से इवेंट हैं?",
+      "इस हफ़्ते इंदौर में क्या करें?",
+      "इंदौर में कॉमेडी शो",
+      "इंदौर में आज रात लाइव म्यूज़िक",
+      "इंदौर में इस महीने कॉन्सर्ट",
+      "इंदौर में इस वीकेंड फ़्री इवेंट",
+      "इंदौर में इस हफ़्ते वर्कशॉप",
+      "इंदौर में नाटक और थिएटर",
+      "इंदौर में इस वीकेंड स्टैंड-अप कॉमेडी",
+      "विजय नगर, इंदौर में इवेंट",
+      "इंदौर में इस वीकेंड बच्चों के साथ क्या करें",
+      "इंदौर में इस शनिवार पार्टी और नाइटलाइफ़",
+      "इंदौर में इस हफ़्ते सांस्कृतिक और धार्मिक कार्यक्रम",
+      "इंदौर में आने वाले इवेंट की लिस्ट कहाँ मिलेगी?"
+    ]
+  }
+}

@@ -6,6 +6,7 @@
  */
 import type { Pool } from "pg";
 import { search, submissions } from "../../config";
+import { snapshotWeek } from "../citations";
 import { mergeDuplicates } from "./dedupe";
 
 /**
@@ -44,6 +45,8 @@ export async function housekeeping(pool: Pool, opts: { dryRun?: boolean; now?: D
   const one = async (sql: string) => Number((await pool.query<{ n: number }>(sql, [now])).rows[0].n);
   const since = "$1::timestamptz - interval '24 hours'";
   const cleanup = opts.dryRun ? { skipped: "dry run" } : await cleanUp(pool, now);
+  // What was live this week, for the citation tracker's weekly figures (Prompt 8).
+  if (!opts.dryRun) await snapshotWeek(pool, now);
   return {
     duplicates,
     eventsMarkedHappened: marked,

@@ -227,6 +227,15 @@ main { padding-bottom: 4.5rem; }
 .search-status p:first-child { font-weight: 700; }
 .filters-heading { font-size: 1rem; margin: 1.6rem 0 0.6rem; }
 
+/* AI citations (Prompt 8) */
+.admin-table td.good { background: color-mix(in oklab, #1fbf75 16%, transparent); }
+.raw .answer { border-top: 1px solid var(--rule); padding: 0.6rem 0; }
+.raw .answer pre, .admin pre { white-space: pre-wrap; word-break: break-word; font-size: 0.85rem; }
+.proof-table { width: 100%; border-collapse: collapse; margin: 0 0 1.5rem; font-size: 0.95rem; }
+.proof-table th, .proof-table td { text-align: left; padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.proof-table th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.table-scroll { overflow-x: auto; }
+
 /* Text pages */
 .prose { max-width: 44rem; }
 .prose h2 { margin-top: 2.25rem; }

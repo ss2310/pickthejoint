@@ -1,4 +1,5 @@
 /** XML sitemaps, split by page type, with last-modified dates taken from the data. */
+import { getPool } from "./db";
 import { locales, site } from "../config";
 import { changelog } from "../content/changelog";
 import { DATE_HUBS } from "./hubs";
@@ -62,9 +63,13 @@ async function hubEntries(now: Date): Promise<SitemapEntry[]> {
   return out;
 }
 
-function pageEntries(): SitemapEntry[] {
+async function pageEntries(): Promise<SitemapEntry[]> {
   const latest = new Date(`${changelog[0]?.date ?? "2026-11-18"}T00:00:00Z`);
-  return ["/about", "/how-we-verify", "/corrections", "/changelog"].map((path) => ({ path, lastmod: latest, oneLanguage: true }));
+  return [
+    ...["/about", "/how-we-verify", "/corrections", "/changelog"].map((path) => ({ path, lastmod: latest, oneLanguage: true })),
+    // The AI citation tracker (Prompt 8) is in both languages and changes weekly.
+    { path: "/ai-citations", lastmod: (await getPool().query<{ at: Date | null }>("SELECT max(imported_at) AS at FROM citation_runs")).rows[0].at ?? latest },
+  ];
 }
 
 export async function sitemapEntries(type: SitemapType, now = new Date()): Promise<SitemapEntry[]> {

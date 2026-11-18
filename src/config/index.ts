@@ -105,6 +105,8 @@ export const budgets = {
   translation: num("TRANSLATION_BUDGET_USD", 5),
   /** Sub-limit inside "model" for public submissions: reading snapped posters and pre-screening. */
   submissions: num("SUBMISSIONS_BUDGET_USD", 3),
+  /** Sub-limit inside "scrape" (cash spend) for the weekly AI citation checks run through GeoGrid. */
+  citations: num("CITATIONS_BUDGET_USD", 10),
   /** Sub-limit inside "model" for natural-language search: parsing queries the rules cannot read. */
   search: num("SEARCH_BUDGET_USD", 3),
   /** Fraction of a cap at which a warning is logged. */
@@ -112,7 +114,7 @@ export const budgets = {
 } as const;
 
 export type BudgetBucket = "scrape" | "model";
-export type SubBudget = "reelTranscript" | "googleEvents" | "newsCalendars" | "enrichment" | "translation" | "submissions" | "search";
+export type SubBudget = "reelTranscript" | "googleEvents" | "newsCalendars" | "enrichment" | "translation" | "submissions" | "search" | "citations";
 
 export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   reelTranscript: "scrape",
@@ -122,6 +124,7 @@ export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   translation: "model",
   submissions: "model",
   search: "model",
+  citations: "scrape",
 };
 
 /**
@@ -356,4 +359,36 @@ export const search = {
   /** Reserved against the budget before a parse; replaced by the measured cost. */
   estInputTokens: 1200,
   estOutputTokens: 150,
+} as const;
+
+/**
+ * Citation tracker (Prompt 8). The AI engines are asked through the owner's
+ * GeoGrid tool from his own computer (scripts/citations/geogrid_run.py), with
+ * GeoGrid's own keys; the results file is imported in /admin/citations.
+ * Engines without an automated route are entered by hand.
+ */
+export const citations = {
+  ourDomain: "pickthejoint.com",
+  /** The site's name as an answer may write it. */
+  namePatterns: [/pick\s*the\s*joint/i, /pickthejoint/i, /पिक\s*द\s*ज[ॉो]इंट/],
+  engines: [
+    { key: "chatgpt", label: "ChatGPT", automated: true },
+    { key: "gemini", label: "Gemini", automated: true },
+    { key: "perplexity", label: "Perplexity", automated: true },
+    { key: "google_aio", label: "Google AI Overviews", automated: true },
+    { key: "copilot", label: "Microsoft Copilot", automated: false },
+    { key: "claude", label: "Claude", automated: false },
+  ],
+  /** GeoGrid's engine labels to ours. */
+  geogridLabels: { ChatGPT: "chatgpt", Gemini: "gemini", Perplexity: "perplexity", "Google AI Overviews": "google_aio" } as Record<string, string>,
+  /** Event listing and ticketing sites; a cited host matching one of these (or a subdomain) is a competitor. */
+  competitors: [
+    "district.in", "bookmyshow.com", "insider.in", "paytminsider.com", "allevents.in", "eventbrite.com", "eventbrite.co.in",
+    "townscript.com", "skillboxes.com", "highape.com", "meraevents.com", "explara.com", "ticketnew.com", "zomato.com",
+    "eventshigh.com", "knowafest.com", "songkick.com", "bandsintown.com", "sortmyscene.com", "urbanaut.app", "ticketsterrace.com",
+  ],
+  /** Longest answer text kept per check (admin only). */
+  excerptChars: 4000,
+  /** Ceiling the admin page suggests for one run, in USD (GeoGrid stops at it). */
+  maxRunUsd: 3,
 } as const;
