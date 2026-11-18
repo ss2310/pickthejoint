@@ -32,7 +32,8 @@ export async function logout(): Promise<void> {
 
 export async function setup(form: FormData): Promise<void> {
   const token = String(form.get("token") ?? "");
-  const back = (error: string): never => redirect(`/admin/setup?token=${encodeURIComponent(token)}&error=${encodeURIComponent(error)}`);
+  // The token is never put back into an address.
+  const back = (error: string): never => redirect(`/admin/setup?error=${encodeURIComponent(error)}`);
   const who = ipHash(clientIp(await headers()));
   if ((await rateCount(`setup:${who}`, cfg.limits.login)) >= cfg.limits.login.max) back("Too many attempts. Wait 15 minutes.");
   const allowed = await setupAllowed(token);
