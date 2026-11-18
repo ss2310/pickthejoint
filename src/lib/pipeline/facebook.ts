@@ -82,6 +82,9 @@ function parseDuration(d: string): number | null {
   return h || m ? ((Number(h?.[1] ?? 0) * 60) + Number(m?.[1] ?? 0)) * 60_000 : null;
 }
 
+/** Items the actor bills as events; a page with no upcoming events comes back as an "error: no_results" row. */
+const billedEvents = (items: Record<string, unknown>[]) => items.filter((i) => !i.error && !i.errorDescription).length;
+
 export interface FacebookReport {
   status: string;
   pagesKnown: number;
@@ -131,14 +134,15 @@ export async function fetchFacebookEvents(
           startUrls: pages.map((p) => ({ url: `https://www.facebook.com/${p.page}/upcoming_hosted_events` })),
           maxEvents: cfg.maxEventsPerPage,
         }, { maxChargeUsd: estimate, maxItems, timeoutSecs: 900 });
-        return { result: run.items, actualUsd: run.items.length * cfg.usdPerEvent + cfg.usdPerRun, units: run.items.length };
+        const events = billedEvents(run.items);
+        return { result: run.items, actualUsd: events * cfg.usdPerEvent + cfg.usdPerRun, units: events };
       },
       { pool },
     );
     if (opts.dryRun || !items) { rep.status = `dry run: would check ${pages.length} page(s), up to ${maxItems} events, about $${estimate.toFixed(2)}`; continue; }
     rep.pagesChecked += pages.length;
     rep.eventsReturned += items.length;
-    rep.scrapeUsd += items.length * cfg.usdPerEvent + cfg.usdPerRun;
+    rep.scrapeUsd += billedEvents(items) * cfg.usdPerEvent + cfg.usdPerRun;
     await pool.query("UPDATE facebook_pages SET last_checked_at = now() WHERE id = ANY($1)", [pages.map((p) => p.id)]);
 
     const today = localDate(new Date(), city.timezone);
