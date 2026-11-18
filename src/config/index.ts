@@ -184,5 +184,7 @@ export const aiCrawlers: { token: string; vendor: string; purpose: "training" | 
 
 export const site = {
   name: "Pick the Joint",
-  url: process.env.SITE_URL ?? "https://pickthejoint.com",
+  url: (process.env.SITE_URL ?? "https://pickthejoint.com").replace(/\/+$/, ""),
+  /** Address for corrections and takedown requests, shown on the corrections page. */
+  contactEmail: process.env.CONTACT_EMAIL ?? "",
 } as const;

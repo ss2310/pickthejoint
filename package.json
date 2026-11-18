@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx db/seed.ts",
+    "db:dev-seed": "tsx scripts/dev-seed.ts",
     "import:handles": "tsx scripts/import-handles.ts",
     "job:ingest": "tsx scripts/jobs/ingest.ts",
     "job:housekeeping": "tsx scripts/jobs/housekeeping.ts",
