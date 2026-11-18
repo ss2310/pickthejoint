@@ -161,6 +161,15 @@ describe("the model, the cache and the limits", () => {
     expect(llm.calls).toHaveLength(1);
   });
 
+  it("keeps a filter the rules were sure of when the model leaves it out, and drops numbers and price words", async () => {
+    // Seen live: the model dropped "Sunday" and kept "sasta 500 kam" as search words.
+    const llm = new FakeLlm(() => ({ category: "music", keywords: ["ghazal", "sufi", "500", "sasta"] }));
+    const u = await understand(pool, llm, { query: "something fun with my parents on Sunday evening, ghazal or sufi qawwali under 500, sasta", vocab, who: null, allowModel: true });
+    expect(u.method).toBe("model");
+    expect(u.parsed).toEqual({ when: "weekday", weekday: 0, category: "music", keywords: ["ghazal", "sufi"] });
+    expect(rules("cheap comedy kal").parsed).toMatchObject({ category: "comedy", when: "tomorrow", keywords: [] });
+  });
+
   it("never asks the model for what the rules read", async () => {
     const llm = new FakeLlm(() => { throw new Error("should not be called"); });
     const u = await understand(pool, llm, { query: "comedy this weekend", vocab, who: "ip-a", allowModel: true });
