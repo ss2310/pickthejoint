@@ -7,6 +7,7 @@ Checked on 18 November 2026. Re-check before switching a source on or adding a c
 - Actor: set `APIFY_IG_POSTS_ACTOR_ID` (or `APIFY_ACTOR_ID`). Input and output are mapped for `apify/instagram-post-scraper` and `apify/instagram-scraper`.
 - List price on Apify's free plan: $0.0017 per post (post scraper, basic data) or $0.0027 per result (instagram-scraper). Config assumes $0.0027; set `APIFY_USD_PER_POST` to match your actor and plan.
 - Reel transcripts: set `APIFY_REEL_TRANSCRIPT_ACTOR_ID` (or `APIFY_TRANSCRIPT_ACTOR_ID`). In use: `steadyfetch/instagram-reel-transcript-scraper`, about $0.015 per reel delivered (nothing charged for a reel with no speech and no on-screen text); it also returns text shown on screen, which is passed to extraction with the speech. Inputs are also mapped for `apify/instagram-reel-scraper` and for actors that take `bulkUrls`. Set `APIFY_USD_PER_TRANSCRIPT` if the price changes.
+- Five national listing accounts (BookMyShow, AllEvents, SortMyScene, Skillbox, District) were switched off on 18 November 2026 (migration 005): they post about every city, and six events from elsewhere had been published as Indore events before the city check existed.
 - Eleven handles from the starting list were switched off on 18 November 2026 (migration 003): seven the actor cannot read (restricted or not found) and four that had not posted for months.
 
 ## Google event results
