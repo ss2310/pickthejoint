@@ -37,6 +37,15 @@ Scheduled jobs run as separate Railway cron services from the same repo, with th
 - housekeeping, daily: start command `npm run job:housekeeping`
 - enrich, weekly: start command `npm run job:enrich`
 
+## Submissions and the admin area (Prompt 6)
+- **Add an event** (`/submit`, `/hi/submit`): a plain HTML form with a hidden honeypot field, Cloudflare Turnstile and per-address rate limits (`src/lib/security.ts`). Form state lives in a draft row reached by a random token, so errors come back with the fields filled. The submitter's name and contact are stored in `submissions.submitter` and never shown.
+- **Snap a poster**: the photo is checked from its bytes (JPEG, PNG, WebP; 8 MB), turned upright, shrunk and re-encoded with sharp, which drops all metadata including location (`src/lib/posters.ts`). It is read by the same vision extraction as Instagram posters and prefills the form. Photos are stored privately in `poster_images` (Postgres), shown only in the admin area, and deleted by housekeeping the day after the event (unsent drafts after 2 days).
+- **Pre-screening** (`src/lib/submissions.ts`): completeness, plausible date, duplicate of a listed event, spam signs by rule, and a fast-tier model check (escalated once to the mid tier when unsure). Everything goes to `review_queue` with the notes; nothing is published until approved. Public submissions are charged to the `submissions` sub-budget (`SUBMISSIONS_BUDGET_USD`, default 3).
+- **Approval** creates the event with origin `submitted` through the ingestion pipeline's own venue, performer and organiser matching, writes the description and publishes it. The page names the source: "Submitted by the organiser" (form) or "Submitted poster" (no image).
+- **Admin** (`/admin`, English only, `noindex`, never cached, outside the language middleware): review queue with approve, edit and reject; poster inbox (several photos at once, read after the response); suggested handles and the handle list; spend against each cap by service, model and job; last run of each job; cancel, take down or restore an event with a recorded reason (`event_actions`).
+- **Admin login** (`src/lib/admin-auth.ts`): one account, scrypt hash in `admin_account`, sessions stored as SHA-256 hashes of a random cookie (HttpOnly, Secure, SameSite=Strict, 12 hours), failed sign-ins limited per address. The password is set once at `/admin/setup?token=…` with `ADMIN_SETUP_TOKEN`; the page locks itself afterwards.
+- **Poster email**: Resend inbound posts `email.received` to `/api/inbound/poster-email`. The Svix signature is checked, only `POSTER_EMAIL_SENDERS` (default `CONTACT_EMAIL`) with SPF or DKIM passing are read, each email is handled once, and image attachments go into the poster inbox.
+
 ## Hindi (Prompt 5)
 English lives at the plain paths; Hindi lives under `/hi/` with the same paths.
 - **Routing:** every page sits under `src/app/[locale]/`. Middleware serves a plain path from `/en/...` without changing the address, sends a typed `/en/...` to the plain path, and leaves `/hi/...` alone. Sitemaps, `robots.txt` and files have no language.

@@ -242,3 +242,59 @@ main { padding-bottom: 4.5rem; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* Forms: "Add an event" and the admin area (Prompt 6) */
+.form-card { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); padding: 1.3rem 1.4rem; margin: 0 0 1.5rem; box-shadow: var(--shadow); }
+.form-card h2 { margin-top: 0; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 0.9rem 1rem; align-items: start; }
+.form-grid .wide, .form-grid fieldset { grid-column: 1 / -1; }
+.form-grid p { margin: 0; }
+.field { display: grid; gap: 0.3rem; font-size: 0.9rem; font-weight: 700; }
+.field input, .field select, .field textarea { font: inherit; font-weight: 400; padding: 0.55rem 0.7rem; border: 1px solid var(--rule); border-radius: 12px; background: var(--bg); color: var(--fg); min-height: 2.8rem; width: 100%; }
+.field textarea { min-height: 5rem; resize: vertical; }
+.field input[type="file"] { padding: 0.45rem; }
+.field input[aria-invalid="true"], .field select[aria-invalid="true"] { border-color: var(--hot); box-shadow: 0 0 0 2px color-mix(in oklab, var(--hot) 25%, transparent); }
+.field.check { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; align-self: end; min-height: 2.8rem; }
+.field.check input { width: auto; min-height: 0; }
+.hint { font-size: 0.8rem; font-weight: 400; color: var(--muted); }
+.field-error { font-size: 0.85rem; font-weight: 700; color: var(--hot); }
+fieldset { border: 1px solid var(--rule); border-radius: var(--radius); padding: 0.9rem 1rem 1rem; margin: 0; }
+legend { font-weight: 800; padding: 0 0.4rem; }
+.banner p:last-child { margin-bottom: 0; }
+/* The honeypot: out of sight and out of the tab order, but present in the HTML for bots. */
+.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
+/* Admin */
+.admin .admin-bar { background: var(--ink); color: var(--ink-fg); }
+.admin .admin-bar .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; padding-top: 0.8rem; padding-bottom: 0.8rem; }
+.admin .admin-bar nav { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.4rem; font-size: 0.92rem; }
+.admin .admin-bar nav a, .admin .admin-bar .linkish { color: var(--ink-fg); text-decoration: none; padding: 0.3rem 0.7rem; border-radius: 99px; font-weight: 600; }
+.admin .admin-bar nav a:hover { background: rgba(255, 255, 255, 0.14); }
+.admin-main { padding-top: 1.5rem; }
+.admin h1 { font-size: clamp(1.6rem, 4vw, 2.3rem); }
+.admin h2 { margin-top: 2rem; }
+.linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--link); cursor: pointer; text-decoration: underline; }
+.button.small-button { padding: 0.45rem 0.95rem; font-size: 0.88rem; }
+.button.ghost { background: var(--surface); color: var(--fg); border: 1px solid var(--rule); box-shadow: none; }
+.stat-row { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 0.7rem; }
+.stat-row li { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 0.6rem 1rem; }
+.stat-row strong { font-size: 1.3rem; margin-right: 0.3rem; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; background: var(--surface); border-radius: 12px; overflow: hidden; display: block; overflow-x: auto; }
+.admin-table th, .admin-table td { text-align: left; vertical-align: top; padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--rule); }
+.admin-table tr.warn td { background: color-mix(in oklab, var(--warn-bg) 45%, var(--surface)); }
+.admin-table tr.muted td { color: var(--muted); }
+.two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 1.2rem; }
+.queue { list-style: none; padding: 0; }
+.item-title { font-size: 1.1rem; margin: 0 0 0.6rem; }
+.item-title::before { display: none; }
+.item-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.8rem; }
+.item-actions form, form.inline { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin: 0; }
+.item-actions input[type="text"], form.inline input[type="text"], form.inline select { font: inherit; font-size: 0.88rem; padding: 0.35rem 0.6rem; border: 1px solid var(--rule); border-radius: 10px; background: var(--bg); color: var(--fg); }
+.facts-list { list-style: none; padding: 0; margin: 0 0 0.6rem; }
+.facts-list li { margin-bottom: 0.15rem; }
+.notes { margin: 0.4rem 0; color: var(--muted); }
+.thumb { max-width: 220px; max-height: 280px; border-radius: 10px; border: 1px solid var(--rule); display: block; }
+.poster-row { display: grid; grid-template-columns: minmax(0, 220px) 1fr; gap: 1rem; }
+@media (max-width: 40rem) { .poster-row { grid-template-columns: 1fr; } }
+.raw summary { cursor: pointer; font-size: 0.85rem; color: var(--link); }
+.raw pre { font-size: 0.75rem; max-height: 22rem; overflow: auto; background: var(--bg); padding: 0.6rem; border-radius: 8px; white-space: pre-wrap; word-break: break-word; }

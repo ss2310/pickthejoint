@@ -17,11 +17,13 @@ import { getPool } from "@/lib/db";
  */
 export const config = {
   runtime: "nodejs",
-  matcher: ["/((?!_next/|favicon.ico).*)"],
+  // The admin area and the API are English-only and private: no language handling, no crawler log, and
+  // large uploads to them are not buffered by middleware.
+  matcher: ["/((?!_next/|favicon.ico|admin(?:/|$)|api/).*)"],
 };
 
 /** Addresses that have no language: sitemaps, robots.txt and files served from the public folder. */
-const NO_LOCALE = /^\/(robots\.txt|sitemap\.xml|sitemaps\/|[^/]+\.(?:txt|svg|png|ico|xml|webmanifest)$)/;
+const NO_LOCALE = /^\/(admin(?:\/|$)|api\/|robots\.txt|sitemap\.xml|sitemaps\/|[^/]+\.(?:txt|svg|png|ico|xml|webmanifest)$)/;
 /** Pages written in English only. Their /hi/ addresses go to the English page. */
 const ENGLISH_ONLY = /^\/(about|how-we-verify|corrections|changelog)\/?$/;
 

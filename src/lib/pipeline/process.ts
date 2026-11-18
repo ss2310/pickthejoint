@@ -32,7 +32,7 @@ export interface ProcessOptions {
 
 interface RawRow {
   id: number; shortcode: string; handle: string; post_url: string; post_type: string | null; caption: string | null;
-  media_urls: string[]; tagged_handles: string[]; posted_at: Date | null; fetched_at: Date; source_kind: PostContext["sourceKind"];
+  media_urls: string[]; tagged_handles: string[]; posted_at: Date | null; fetched_at: Date; source_kind: "instagram" | "google" | "news";
   filter_result: FilterLabel | null; extraction: Extraction | null; transcript: string | null;
   transcript_requested_at: Date | null; city_id: number; city_name: string; timezone: string; handle_type: string | null;
 }

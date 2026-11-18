@@ -28,6 +28,8 @@ function sourceLabel(s: { source_type: string; url: string | null }): string {
   const m = messages().event;
   if (s.source_type === "instagram") return m.sourceInstagram;
   if (s.source_type === "submission") return m.sourceSubmitted;
+  // A poster someone sent us: named as the source, never shown (the image is not ours to publish).
+  if (s.source_type === "poster") return m.sourcePoster;
   try { return m.sourceListing(new URL(s.url!).hostname.replace(/^www\./, "")); } catch { return m.sourceWeb; }
 }
 

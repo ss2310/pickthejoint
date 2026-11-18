@@ -103,12 +103,14 @@ export const budgets = {
   enrichment: num("ENRICHMENT_BUDGET_USD", 20),
   /** Sub-limit inside "model" for translating page text into Hindi. */
   translation: num("TRANSLATION_BUDGET_USD", 5),
+  /** Sub-limit inside "model" for public submissions: reading snapped posters and pre-screening. */
+  submissions: num("SUBMISSIONS_BUDGET_USD", 3),
   /** Fraction of a cap at which a warning is logged. */
   warnAt: 0.8,
 } as const;
 
 export type BudgetBucket = "scrape" | "model";
-export type SubBudget = "reelTranscript" | "googleEvents" | "newsCalendars" | "enrichment" | "translation";
+export type SubBudget = "reelTranscript" | "googleEvents" | "newsCalendars" | "enrichment" | "translation" | "submissions";
 
 export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   reelTranscript: "scrape",
@@ -116,6 +118,7 @@ export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   newsCalendars: "model",
   enrichment: "model",
   translation: "model",
+  submissions: "model",
 };
 
 /**
@@ -271,4 +274,53 @@ export const alerts = {
   resendApiKey: process.env.RESEND_API_KEY ?? "",
   from: process.env.ALERT_FROM ?? "",
   to: process.env.ALERT_TO ?? process.env.CONTACT_EMAIL ?? "",
+} as const;
+
+/**
+ * User submissions and posters (Prompt 6). Nothing submitted is published
+ * until the admin approves it.
+ */
+export const submissions = {
+  turnstileSiteKey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "",
+  turnstileSecret: process.env.TURNSTILE_SECRET_KEY ?? "",
+  /** Per hashed IP address. */
+  limits: {
+    form: { max: 5, windowMinutes: 60 },
+    formDaily: { max: 15, windowMinutes: 24 * 60 },
+    poster: { max: 6, windowMinutes: 24 * 60 },
+    /** Failed admin sign-ins. */
+    login: { max: 5, windowMinutes: 15 },
+  },
+  /** Accepted upload types, checked from the file's bytes, not its name. */
+  imageFormats: ["jpeg", "png", "webp"] as readonly string[],
+  maxUploadBytes: 8 * 1024 * 1024,
+  /** Posters dropped into the admin inbox at once. */
+  maxInboxFiles: 12,
+  /** Long edge of the stored copy: enough for the vision model to read small print. */
+  storedLongEdge: 1600,
+  /** Poster photos are deleted this long after the event, or after upload when no event came of them. */
+  keepDaysAfterEvent: 1,
+  keepDaysUnused: 7,
+  /** Drafts never sent are deleted after this many days, with their poster. */
+  draftDays: 2,
+} as const;
+
+/** The single-admin area (Prompt 6). */
+export const admin = {
+  /** Set on the web service to open /admin/setup once; remove it afterwards. */
+  setupToken: process.env.ADMIN_SETUP_TOKEN ?? "",
+  /** ADMIN_RESET=on lets the setup page replace an existing password (the setup token is still needed). */
+  allowReset: process.env.ADMIN_RESET === "on",
+  sessionHours: 12,
+  minPasswordLength: 14,
+} as const;
+
+/** The poster email address, through Resend's inbound email (Prompt 6). */
+export const inbound = {
+  /** Signing secret of the Resend webhook for the email.received event ("whsec_..."). */
+  webhookSecret: process.env.RESEND_INBOUND_WEBHOOK_SECRET ?? "",
+  /** Only mail from these senders is read (comma-separated addresses); anything else is dropped. */
+  allowedSenders: (process.env.POSTER_EMAIL_SENDERS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
+  /** City the emailed posters are filed under. */
+  city: (process.env.POSTER_EMAIL_CITY ?? "indore").toLowerCase(),
 } as const;

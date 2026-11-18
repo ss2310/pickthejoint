@@ -63,6 +63,10 @@ describe("addresses", () => {
       expect(route(p)).toEqual({ action: "next" });
     }
     expect(route("/indore/feed.ics")).toEqual({ action: "rewrite", to: "/en/indore/feed.ics" });
+    // The admin area and the API are English only and outside the language routing; the submit page has both languages.
+    for (const p of ["/admin", "/admin/queue", "/api/inbound/poster-email"]) expect(route(p)).toEqual({ action: "next" });
+    expect(route("/submit")).toEqual({ action: "rewrite", to: "/en/submit" });
+    expect(route("/hi/submit")).toEqual({ action: "next" });
   });
 
   it("links the two versions of a page to each other", () => {
