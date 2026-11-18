@@ -1,6 +1,6 @@
 # Handoff: where the build stands
 
-Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 3b, and updated the same day after Prompts 4 and 5, a redesign, and Prompts 6, 7 and 8. Read this with `CLAUDE.md` (project rules) and `README.md` (commands and layout). The owner works prompt by prompt from a numbered prompt file (Prompts 1 to 15). **The text of every prompt not yet built is in `docs/build-prompts.md`**, so there is no need to ask for it. Each prompt ends with checks that must be run and shown before moving on.
+Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 3b, and updated the same day after Prompts 4 and 5, a redesign, Prompts 6, 7 and 8, and Prompt 9. Read this with `CLAUDE.md` (project rules) and `README.md` (commands and layout). The owner works prompt by prompt from a numbered prompt file (Prompts 1 to 15). **The text of every prompt not yet built is in `docs/build-prompts.md`**, so there is no need to ask for it. Each prompt ends with checks that must be run and shown before moving on.
 
 **Working rule from the owner (18 Nov):** at most two prompts per session. After the second prompt's checks, update this file and start a new session for the next prompt.
 
@@ -18,7 +18,7 @@ Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 
 | 6 Submissions and admin area | Live. Checks run on 18 Nov: see "Prompt 6 check results" below. Poster email built but waits on the owner's Resend setup |
 | 7 Natural-language search | Live. Checks run on 18 Nov: see "Prompt 7 check results" below |
 | 8 Citation tracker | Live. Baseline week recorded on 18 Nov: see "Prompt 8 check results" below |
-| 9 Wider sourcing | **Next**, but only after a week of cost data (first production ingest was 18 Nov, so from about 25 Nov) |
+| 9 Wider sourcing | Live. Built on 18 Nov at the owner's request before the week of cost data ("start now anyway"). See "Prompt 9 check results" below |
 | 10 to 15 | Not started. Text in `docs/build-prompts.md` |
 
 Production showed 13 Indore events before Prompt 6; one approved submission has been added since.
@@ -26,7 +26,8 @@ Production showed 13 Indore events before Prompt 6; one approved submission has 
 ## Production setup (Railway project "melodious-love")
 
 - `web`: the Next.js site. Pre-deploy `npm run railway:release` (migrations, seed, one-time handle load). Deploys from `main`.
-- `ingest`: cron `30 0 * * *` (06:00 IST), `npm run job:ingest -- --batch`.
+- `ingest`: cron `30 0 * * *` (06:00 IST), `npm run job:ingest -- --batch`. Since Prompt 9 its default sources also include the web calendars (every 3 to 7 days), public Facebook events and the hashtag discovery pull (weekly); each skips itself when not due.
+- `housekeeping` also links the venue census and festival series daily, re-tiers handles and refreshes the OpenStreetMap census on the 1st of each month, and stores the weekly coverage report on Mondays.
 - `housekeeping`: cron `0 19 * * *` (00:30 IST), `npm run job:housekeeping`.
 - `enrich`: cron `30 20 * * 0` (Monday 02:00 IST), `npm run job:enrich`. Created for Prompt 4. Its variables are references to `web` (and to `ingest` for `APIFY_USD_PER_POST`), plus `ENRICHMENT_BUDGET_USD=20`, `INDEXNOW=on` and `TRANSLATION=on`. It is also the service used for one-off scripts (see below).
 - `TRANSLATION=on` is set on `ingest` and `enrich`, so text they create or change is translated into Hindi at the end of each run.
@@ -72,6 +73,7 @@ Production showed 13 Indore events before Prompt 6; one approved submission has 
 - **Submissions (Prompt 6), decided 18 Nov:** poster photos are stored privately in Postgres (`poster_images`, as cleaned JPEG bytes; no new service) and deleted the day after the event, or within 2 to 7 days when unused. The owner wants the poster email address through Resend inbound (built; waits on setup, below). The admin password is set by the owner on `/admin/setup` with a token from a Railway variable, never in chat. Public poster reading and screening have their own monthly limit, `SUBMISSIONS_BUDGET_USD` (default $3), inside the model budget. `sharp` became a direct dependency (it was already installed through Next.js; no account).
 - **AI citation checks (Prompt 8), decided 18 Nov:** the owner chose to reuse their GeoGrid tool (`C:\Users\Utsav Goyal\Documents\Joe Roofer Enrichment`), run from their own computer, with all four engines (ChatGPT and Perplexity through DataForSEO, Gemini through OpenRouter, Google AI Overviews: the same sources and routes as GeoGrid's probe), and approved the 30 questions in `data/citation-queries.json`. About $1.35 to $1.80 a run from GeoGrid's existing balances, logged under `CITATIONS_BUDGET_USD` (default $10 a month, scrape budget). GeoGrid itself is not changed and its keys never reach Pick the Joint. The geo-service "probe" (Railway project "Dashboard") could not be reused as is: it asks niche questions about one business and checks for a business name, not our questions and cited domains.
 - **Search (Prompt 7), built 18 Nov:** rules first, the fast tier only for queries the rules cannot read. Limits: 20 model readings an hour and 60 a day per hashed address; `SEARCH_BUDGET_USD` (default $3 a month) and `SEARCH_DAILY_BUDGET_USD` (default $0.25 a UTC day), both inside the model budget and both unset on `web` (defaults apply). Crawlers never trigger a model call. Past a limit the search quietly uses keywords.
+- **Wider sourcing (Prompt 9), decided 18 Nov:** the owner approved the plan (venue census from OpenStreetMap rather than Google Maps; web calendars only where terms and robots.txt allow: MeraEvents, Incredible India, MP Tourism, IIT Indore; Meetup off until decided) and added **public Facebook events, read logged out through Apify**, although Meta's terms and robots.txt prohibit automated collection (owner: "If my facebook profile does not gets logged in i think facebook events can be added"). Monthly limits: discovery $3 and Facebook $5 (scrape), web calendars and Facebook reading $3 (model). District, BookMyShow, AllEvents, Eventbrite, KonfHub, TED, Amar Ujala and BCCI forbid automated collection and are not built; the terms findings for every source are in `docs/sources.md`.
 - **Enrichment (Prompt 4):** facts come from the entity's own Instagram bio (Apify) and from the mid-tier model with Anthropic's web search and web fetch tools. Monthly limit $20 inside the model budget, a quarter of it per weekly run. The owner approved the new `enrich` Railway service.
 
 ## Things learned the hard way
@@ -79,7 +81,7 @@ Production showed 13 Indore events before Prompt 6; one approved submission has 
 - **City check:** listing accounts post about every city. Extraction now returns each event's city and only events in the handle's city are published. Six out-of-city events had been published before this existed; an audit unpublished them.
 - **Duplicate venues:** "Ohlio" and "Ohlio Gourmet Cafebar" were stored as two venues. A name that is another name plus trailing words now matches, and housekeeping merges duplicates daily.
 - **Collab posts:** a post on a handle's profile can be owned by another account. It is filed under the profile it was fetched from.
-- **Description writer** sometimes says a fact is missing ("No ticket price has been provided") despite being told not to. Worth tightening in `src/lib/pipeline/write.ts`.
+- **Description writer** sometimes says a fact is missing ("No ticket price has been provided") despite being told not to. Since PR #32 such sentences are dropped before publishing (`dropMissingFactSentences` in `src/lib/pipeline/write.ts`); older descriptions keep them.
 
 - **Enrichment, paused turns:** a research request with web search can stop with `pause_turn` and continue in the next response. The notes are everything written after the last tool call across all of those responses; keeping only the last response loses most of them and makes every entity look unidentifiable.
 - **Enrichment, identity:** the researcher was at first too ready to call an identity uncertain (for instance when two listing sites gave different addresses). The prompts now separate "which venue or performer is this" from doubt about one detail.
@@ -94,6 +96,8 @@ Production showed 13 Indore events before Prompt 6; one approved submission has 
 - **Alert email: not yet proven.** Needs `RESEND_API_KEY` and `ALERT_FROM` (an address on a domain verified in Resend) on the `ingest` and `housekeeping` services. Then set `FAIL_ON_PURPOSE=housekeeping` for one run to confirm the email arrives, and remove it.
 
 ## Waiting on the owner
+
+- **Prompt 9:** (1) approve or dismiss the suggested handles at `/admin/handles` (now with how often and where each was seen), and start tracking venue handles at `/admin/venues`; the handle list is still the main limit on coverage. (2) Add Facebook pages of Indore venues and organisers at `/admin/coverage`: only 4 are known and none had upcoming events. (3) Decide whether Meetup group iCal feeds are acceptable, and whether to write to District or AllEvents for permission or API access. (4) Review the 8 IIT Indore conferences and the MeraEvents possible duplicate in the review queue.
 
 - Resend key and sending address (above).
 - `SITE_PROFILES`: URLs of Pick the Joint's own Instagram, YouTube, X and Facebook profiles, for `sameAs`.
@@ -137,7 +141,7 @@ Per entity the cost ranged from $0.09 to $0.27: research with web search is abou
 - **Backfill run:** 131 translated, 0 failed, $0.13 (translation sub-budget, $5 a month). `TRANSLATION=on` is now set on `ingest` and `enrich`, so new text is translated at the end of each run.
 - **Pages checked on the live site:** three event pages (`/hi/indore/events/stylista-winter-and-wedding-exhibition-2026-12-19`, `.../tie-global-summit-2026-indore-2026-12-14`, `.../the-bar-takeover-2026-11-28`), the Hindi city home `/hi/indore`, a venue and an artist page. Titles, venues, areas, descriptions, interface text and dates are in Hindi; hreflang links both ways; sitemaps list both languages.
 - **One bad translation found and fixed:** an event title came back as "...इंडिया टour" (a word half in Latin letters). Since PR #17 such translations are refused and any stored one is redone by the next run.
-- **Not Hindi's fault, still to fix:** the English description writer sometimes says a fact is missing ("No ticket price has been provided"), and the Hindi carries that over. See `src/lib/pipeline/write.ts`.
+- **Not Hindi's fault:** the English description writer sometimes says a fact is missing ("No ticket price has been provided"), and the Hindi carries that over. Fixed for new text in PR #32 (see "Things learned the hard way").
 - **Times** show as "8:00 pm" on Hindi pages (the platform's Hindi formatting); acceptable, but could become "रात 8:00 बजे" later.
 - **Unplanned spend on 18 Nov:** a Railway `redeploy` reused the old start command and ran a full enrichment for 8 entities ($1.21). See "To run a job once" above for the safe way.
 
@@ -210,6 +214,32 @@ Built in PR #27, with #28 (three listing sites added to the competitor list afte
 2. Upload the file it names at `/admin/citations`.
 3. Type or upload that week's Bing AI Performance and Search Console figures on the same page.
 
-## Next: Prompt 9
+## Prompt 9 check results (18 Nov, live site)
 
-Wider sourcing. The text is in `docs/build-prompts.md`. Its own notes say Prompts 9 to 11 come only after a week of cost data; the first production ingest ran on 18 Nov, so start from about 25 Nov and read a week of `cost_log` (the admin overview shows spend by service, model and job) before planning. The baseline above shows which sources AI engines lean on for Indore (allevents.in, District, BookMyShow, Amar Ujala, stayhappening.com): useful when choosing what to widen into, within the source rules in `docs/sources.md` (Dainik Bhaskar and Naidunia forbid automated collection).
+Built in PR #30, with #31 (Overpass retries; forced runs record the read time; Facebook skip reasons), #32 (description writer, below; Facebook cost counts only real events) and #33 (the census keeps only venues with a published event; this section). See the README section "Wider sourcing (Prompt 9)" and `docs/sources.md`.
+
+**Cost basis for the plan:** the one production ingest so far (18 Nov): 107 posts, 20 events published, $0.97 ($0.0023 a post to scrape, about $0.0048 a post in model spend, about $0.04 a published event).
+
+Each new source was run once on production (on the `enrich` service) as a dry run, then for real with small limits (`--force --max-items 3`). Model calls in this check were not batched; the daily ingest runs with `--batch` at half price.
+
+| Source | Read | New events published | Already known | To review | Cost | Cost per new event |
+|---|---|---|---|---|---|---|
+| MeraEvents (Indore listing, 14 events seen) | 3 events | 2 | 0 | 1 (possible duplicate: three meet-ups at one café on one afternoon) | $0.047 | $0.024 |
+| Incredible India (101 MP festival pages, 99 set aside without a model call) | 2 pages | 2 (Raag Ameer 3 to 5 Jan, Rangpanchami Ger 27 Mar 2027) | 0 | 0 | $0.032 | $0.016 |
+| MP Tourism (statewide listing) | 1 page | 0 (no upcoming Indore event) | 0 | 0 | $0.017 | – |
+| IIT Indore | 1 page, 8 events | 0 | 0 | 8 (venue "IIT Indore" inferred at 0.70) | $0.039 | – |
+| Facebook (4 pages known: 3 from page links, 1 from the census) | 3 pages, twice | 0 (every page answered `no_results`: no upcoming events) | 0 | 0 | logged $0.062 (counted the empty rows; fixed in #32) | – |
+| Hashtag discovery | 6 posts | never publishes | – | 6 new suggested handles, 0 places | $0.014 | $0.002 a new handle |
+| Venue census (OpenStreetMap) | 226 places | – | 1 linked to a listed venue | – | free | – |
+
+- **New versus known:** all 4 published events were new (none was already listed from Instagram), so none was confirmed by a second source yet. Duplicates are caught: the third MeraEvents meet-up went to review instead of being published twice.
+- **Census by type (Indore):** 89 religious, 55 hotels and banquet halls, 49 colleges, 13 malls, 9 community, 4 grounds, 3 cultural centres, 3 clubs and bars, 1 auditorium, plus the venues we list. OpenStreetMap is thin on clubs, cafés and auditoriums; those come from `/admin/venues` and discovery.
+- **The Ger event attached to its series** (`/series/indore-rangpanchami-ger`), which existed before the date was published.
+- **Found and fixed:** the description writer said the Ger "ends at 11:59 PM" (how an end date with no end time is stored) and that no performers or price "have been provided". Since #32 the writer gets only the end date, and sentences that only report a missing fact are dropped before publishing (this also settles the old note about `write.ts`). The four events published in this check keep their first text: the Ger page still has both sentences, to correct by hand.
+- **Not checked live:** location-tag discovery (`DISCOVERY_LOCATIONS_PER_WEEK` stays 0: no location tags came in the 6 posts, and it is unproven that the actor returns posts for location pages; test it with one location once there are some), the monthly re-tier (first run 1 Dec; handles younger than 30 days are left alone, so the first changes come on 1 Jan), and the stored Monday coverage report (first on 23 Nov).
+- **Coverage page** (`/admin/coverage`) reports cost per published event by source. Model spend is recorded per item only from 18 Nov evening, so Instagram's model share before then shows as $0.
+- The `enrich` service is back on `npm run job:enrich` and `30 20 * * 0`.
+
+## Next: Prompt 10
+
+Artist tracking and official video. The text is in `docs/build-prompts.md`. Prompts 10 and 11 were also meant to wait for a week of cost data (from about 25 Nov); ask the owner whether to wait. The coverage reports stored on 23 and 30 Nov show which Prompt 9 sources earn their keep.
