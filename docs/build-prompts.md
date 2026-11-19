@@ -5,7 +5,7 @@ The owner's numbered build prompts, copied word for word from the prompt file he
 How the owner runs them:
 - In order, each ending with checks that must be run and shown before moving on.
 - At most two prompts per session, then update `docs/HANDOFF.md` and start a new session.
-- Prompts 9 to 11 are the depth layer: only after a week of cost data.
+- Prompts 9 to 11 are the depth layer: only after a week of cost data. (Overridden: the owner chose to build Prompt 9 at once on 18 Nov, and Prompts 10 to 15 at once, confirmed 20 Nov.)
 - Prompt 12 needs live events and the generated event images from Prompt 3b.
 - Prompts 13 to 15 are written as additions to an already-built site, so they are safe to run after Prompt 5 or later.
 

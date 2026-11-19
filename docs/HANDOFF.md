@@ -18,10 +18,11 @@ Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 
 | 6 Submissions and admin area | Live. Checks run on 18 Nov: see "Prompt 6 check results" below. Poster email built but waits on the owner's Resend setup |
 | 7 Natural-language search | Live. Checks run on 18 Nov: see "Prompt 7 check results" below |
 | 8 Citation tracker | Live. Baseline week recorded on 18 Nov: see "Prompt 8 check results" below |
-| Second look (owner's decisions of 19 Nov, not a numbered prompt) | Built, **switched off** until the owner has seen a production dry run and `SECOND_LOOK=on` is set on `ingest`. Never run for real, so its cost per lookup is an estimate. See "Second look" below |
+| Second look (owner's decisions of 19 Nov, not a numbered prompt) | Live but **switched off**. Run once on production on 19 Nov (1 merged, 3 lookups found nothing, $0.39). Daily running (`SECOND_LOOK=on` on `ingest`) is the owner's later call. See "Second look" below |
 | 9 Wider sourcing | Live. Built on 18 Nov at the owner's request before the week of cost data ("start now anyway"). See "Prompt 9 check results" below |
-| Facebook page posts (owner's request of 19 Nov, not a numbered prompt) | Built, **switched off** until the owner has seen a production dry run and `FACEBOOK_POSTS=on` is set on `ingest`. See "Facebook page posts" below |
-| 10 to 15 | Not started. Text in `docs/build-prompts.md` |
+| Facebook page posts (owner's request of 19 Nov, not a numbered prompt) | Live (PR #34). The owner saw the dry-run cost and had it switched on: `FACEBOOK_POSTS=on` was set on `ingest` on 19 Nov, so the first real run is the 06:00 IST job of 20 Nov. See "Facebook page posts" below |
+| 10 Artist tracking and official video | Built on 19 Nov (PR #35), brought up to date with main on 20 Nov. The owner has decided to build 10 to 15 now without waiting for cost data. See "Prompt 10" below for what is checked and what waits |
+| 11 to 15 | Not started; to be built next, two per session. Text in `docs/build-prompts.md` |
 
 Production showed 13 Indore events before Prompt 6; one approved submission has been added since.
 
@@ -101,7 +102,8 @@ Production showed 13 Indore events before Prompt 6; one approved submission has 
 ## Waiting on the owner
 
 - **Prompt 9:** (1) approve or dismiss the suggested handles at `/admin/handles` (now with how often and where each was seen), and start tracking venue handles at `/admin/venues`; the handle list is still the main limit on coverage. (2) Facebook pages: done on 19 Nov (120 supplied; see "Facebook page posts" below). (3) Decide whether Meetup group iCal feeds are acceptable. District has been written to; the AllEvents API request is drafted but not known to be sent. (4) Review the 8 IIT Indore conferences and the MeraEvents possible duplicate in the review queue.
-- **Facebook page posts:** see the production dry run, then say whether to switch it on (`FACEBOOK_POSTS=on` on `ingest`).
+- **Facebook page posts:** after the first real run (20 Nov), compare its cost with the Apify console and set `APIFY_USD_PER_FB_POST` if the plan charges less than $0.007 a post; look at `pagesWithNothing` in the run report for pages the scraper could not read.
+- **Prompt 10:** (1) add `YOUTUBE_API_KEY` on `web` in Railway (steps were given on 19 Nov), then a reference to it on `ingest`. (2) At `/admin/artists`: add Instagram accounts for tracked artists that have none, check each suggested YouTube channel is the artist's own, and approve or reject the videos.
 
 - Resend key and sending address (above).
 - `SITE_PROFILES`: URLs of Pick the Joint's own Instagram, YouTube, X and Facebook profiles, for `sameAs`.
@@ -258,7 +260,7 @@ On 19 Nov the review queue held 10 scraped posts waiting for a hand lookup, most
 - **Switched off by default.** `SECOND_LOOK=on` on the `ingest` service makes the daily run finish with it (after new posts are processed, before translation). `SECOND_LOOK_PUBLISH=on` is a second, separate switch for publishing without the click; leave it unset.
 - **Where the result shows:** `/admin/queue`. An item the lookup settled has a "Second look" box with the fact, the page it came from and a note, and its button reads "Approve with the found facts". An item it could not settle says "Nothing found" with the note and anything left out, and stays as it was.
 - **One lookup is per post, not per event:** of a line-up post's several queued events, only the first gets it (`skipped.samePost` in the report).
-- **Migration 014** adds `raw_posts.second_look_at` (the once-per-post marker). 013 is taken by the open Prompt 10 work; migrations are tracked by name, so the order does not matter.
+- **Migration 014** adds `raw_posts.second_look_at` (the once-per-post marker). 013 is Prompt 10's; migrations are tracked by name, so the order does not matter.
 - **Local dry run:** with a local database in `DATABASE_URL`, `npx tsx scripts/jobs/second-look.ts --dry-run` (no API key needed; it stops at the budget guard). On 19 Nov, against 10 made-up queue items: 6 eligible, 1 would be merged into an existing listing for free, 4 would be looked up, estimated $0.41, nothing sent, nothing changed.
 - **Production dry run (free; needs the owner's yes because it changes a start command for a few minutes):** after the pull request is merged and `web` has deployed (that runs migration 014), follow "To run a one-off script on production" with `npm run job:second-look -- --dry-run` as the `enrich` service's start command, read the report in the deploy logs (`eligible`, `estimate.wouldMergeIntoListed`, `estimate.wouldLookUp`, `estimate.usd`), then put back `npm run job:enrich` and `30 20 * * 0`. The dry run needs no variable set. Expected on the queue as it stood on 19 Nov: 10 open posts, 6 already past, about 4 to try, roughly $0.40 if later run for real.
 - **To switch it on (owner's yes needed; this is the paid step):** set `SECOND_LOOK=on` on `ingest`. The next 06:00 IST run then works through the queue: at most 15 lookups a run and $8 a month. To run it once by itself instead, use the one-off method above with `npm run job:second-look` (no `--dry-run`) and `SECOND_LOOK=on` set on `enrich` for that run, then remove it.
@@ -280,14 +282,24 @@ The owner published "Shreya Ghoshal Live – The Unstoppable Tour" with the wron
 The owner supplied 120 public Indore Facebook pages (found with Perplexity; now `data/facebook-pages-indore.csv`: 19 tier A, 70 tier B, 31 tier C; 19 are statewide or national pages whose posts are kept only when they name Indore). Only 5 of the 120 use Facebook's Events feature, which was all the Prompt 9 reader read, so the owner chose to have their ordinary posts read as well.
 
 - **How it works:** `src/lib/pipeline/facebook-posts.ts` reads the newest posts of pages that are due (A every two days, B weekly, C every two weeks; 3, 3 and 2 posts a check; only posts newer than the last check), through `apify/facebook-posts-scraper`, and stores them in `raw_posts` (`source_kind 'facebook'`, shortcode `fbp:<post id>`). The normal pipeline does the rest, including reading the flyer image. A page with 12 posts read and no event among them drops to the tier C pace by itself. Run it alone with `--sources facebook-posts`.
-- **Switched off by default.** It runs only where `FACEBOOK_POSTS=on` is set. The owner was promised a production dry run with its cost before any paid run.
+- **Off unless `FACEBOOK_POSTS=on` is set**, which it now is on `ingest` (19 Nov, at the owner's word after seeing the dry run: first run 60 pages, up to 180 posts, at most $1.26 to scrape and about $0.87 in batched model spend; production loaded 119 pages, 1 was already there).
 - **Cost:** `FACEBOOK_POSTS_BUDGET_USD` (default $10 a month, inside the scrape budget); reaching it stops this source only. Priced at $0.007 a post (Apify's list price with the date filter); the owner's plan may be cheaper, so compare the first real run with the Apify console and set `APIFY_USD_PER_FB_POST`. Worst case with all 120 pages at their caps is about 1,900 posts a month ($13 at list price, so the $10 limit would bite); model spend on those posts is roughly $0.005 a post unbatched, half that in the daily batch run.
 - **Not known until the first real run:** whether the actor reads pages given by number (16 of the 120, including the 5 `/p/Name-number/` addresses), whether it charges for error rows (the code counts every returned item as charged), and how many posts survive the free rules filter. The run report lists `pagesWithNothing` and the first few skip reasons.
 - **Also changed:** the Events-tab reader now takes 30 pages a run (pages that have shown an event first, the rest in turn) so its worst-case estimate stays under its $5 limit with 120 pages on record. `/admin/coverage` takes several page links at once, shows posts read, posts kept and posts that led to an event per page, and lets the tier be changed.
 - The page list is loaded by the release command on every deploy; it never changes a tier or an on/off switch set in the admin area.
 
-## Next: Prompt 10
+## Prompt 10 (19 Nov): artist tracking and official video
 
-Artist tracking and official video. The text is in `docs/build-prompts.md`. **The owner chose on 19 Nov to wait for the week of cost data (from about 25 Nov) before Prompt 10.** The coverage reports stored on 23 and 30 Nov show which Prompt 9 sources earn their keep.
+Built in the same session as the Facebook posts reader (that session's second build) as PR #35, which then waited unmerged while the second look and the event editor were built. On 20 Nov it was brought up to date with main (one import clash on the event page; 245 tests pass). See the README section "Artist tracking and official video (Prompt 10)" for how it works.
+
+- **Tracking** runs inside the daily `ingest` job (`--sources artists`): artists with an event in the next 30 days (until 7 days after), plus pinned ones; newest 3 Instagram posts every 3 days; fast model sorts them, mid tier writes release lines. Limits: `ARTIST_TRACKING_BUDGET_USD` $5 (scrape), `ARTIST_TEXT_BUDGET_USD` $3 (model).
+- **Video** needs `YOUTUBE_API_KEY` on `web` (the owner was given the steps on 19 Nov) and a reference to it on `ingest`. Without it the run reports "YOUTUBE_API_KEY is not set" and carries on.
+- **Admin:** `/admin/artists` (tracked artists, pinning, Instagram and YouTube links, videos waiting for approval, release lines, posts read and why each was ignored).
+- **Known limits:** an artist needs an Instagram account in `official_links` to be tracked (many artist stubs have none: add them on the admin page). A show post is filed under the city of the artist's nearest event; multi-city tour posts are Prompt 13's job. No `VideoObject` structured data yet, because only the year of publication is stored and Google wants a full date.
+- **Checks still to run on production** (the prompt's own): tracking for 5 artists with upcoming events, showing updates produced and ignored, the video selections awaiting approval, and the cost per tracked artist per month. Expected cost per artist: at most 3 posts every 3 days at $0.0023, so about $0.07 a month to scrape, plus under $0.01 in model spend.
+
+## Next: Prompt 11
+
+Practical facts and weekly roundups. The text is in `docs/build-prompts.md`. **The owner decided (said again on 20 Nov) to build Prompts 10 to 15 now, one after another, without waiting for the week of cost data.** Keep to two builds per session. The coverage reports stored on 23 and 30 Nov still show which Prompt 9 sources earn their keep.
 
 Also on 19 Nov: the owner wrote to District asking for a feed or permission (the reply is pending; nothing is built for District), and has a drafted request for AllEvents' paid Events API (its price is unknown; nothing is to be built on it until the owner has seen the price).

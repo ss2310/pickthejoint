@@ -55,6 +55,37 @@ export const apify = {
   usdPerTranscript: num("APIFY_USD_PER_TRANSCRIPT", 0.015),
 } as const;
 
+/**
+ * Artist tracking and official video (Prompt 10). Only artists with an event
+ * in one of our cities soon, or pinned by the owner, are tracked.
+ */
+export const artistTracking = {
+  get enabled() { return process.env.ARTIST_TRACKING !== "off"; },
+  /** At most this many artists are tracked at once: pinned ones first, then the soonest events. */
+  maxTracked: num("ARTIST_TRACKING_MAX", 40),
+  /** An artist is tracked from this many days before an event... */
+  upcomingDays: 30,
+  /** ...until this many days after their last one. */
+  stopAfterDays: 7,
+  /** A little under three days between checks, so a daily job that drifts still picks artists up. */
+  everyHours: 70,
+  /** How far back to look the first time an artist is checked. */
+  firstCheckLookbackDays: 14,
+  /** Below this, the fast model's label is checked once by the mid tier. */
+  minConfidence: 0.7,
+  /** Words allowed in a release line. */
+  updateMaxWords: 30,
+  /** YouTube Data API key (free quota: 100 searches a day; everything else 10,000 units a day). */
+  get youtubeApiKey() { return process.env.YOUTUBE_API_KEY ?? ""; },
+  videosPerArtist: 5,
+  /** Artists whose videos are looked up per run; each costs at most 2 of the day's 100 searches. */
+  videoLookupsPerRun: num("ARTIST_VIDEO_LOOKUPS_PER_RUN", 10),
+  /** Videos shorter than this are left out (Shorts and teasers are not an artist's best-known work). */
+  minVideoSeconds: 61,
+  /** Videos shown for an artist on an event page. */
+  videosOnEventPage: 2,
+} as const;
+
 /** Ingestion tunables (Prompt 2). */
 export const ingestion = {
   /** Latest posts fetched per handle per check. */
@@ -120,6 +151,10 @@ export const budgets = {
    * It also bounds the model spend on those posts, since only stored posts are ever read by a model.
    */
   facebookPosts: num("FACEBOOK_POSTS_BUDGET_USD", 10),
+  /** Sub-limit inside "scrape" for checking tracked artists' Instagram posts (Prompt 10). */
+  artistTracking: num("ARTIST_TRACKING_BUDGET_USD", 5),
+  /** Sub-limit inside "model" for sorting tracked artists' posts and writing update lines and video notes (Prompt 10). */
+  artistText: num("ARTIST_TEXT_BUDGET_USD", 3),
   /** Sub-limit inside "model" for reading events from web calendars and Facebook events (Prompt 9). */
   webCalendars: num("WEB_CALENDARS_BUDGET_USD", 3),
   /** Fraction of a cap at which a warning is logged. */
@@ -130,7 +165,7 @@ export type BudgetBucket = "scrape" | "model";
 export type SubBudget =
   | "secondLook"
   | "reelTranscript" | "googleEvents" | "newsCalendars" | "enrichment" | "translation" | "submissions" | "search" | "citations"
-  | "discovery" | "facebookEvents" | "facebookPosts" | "webCalendars";
+  | "discovery" | "facebookEvents" | "facebookPosts" | "webCalendars" | "artistTracking" | "artistText";
 
 export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   reelTranscript: "scrape",
@@ -146,6 +181,8 @@ export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   facebookEvents: "scrape",
   facebookPosts: "scrape",
   webCalendars: "model",
+  artistTracking: "scrape",
+  artistText: "model",
 };
 
 /**

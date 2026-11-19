@@ -9,7 +9,7 @@
  *
  * Usage: npm run job:ingest -- [--dry-run] [--batch] [--city indore]
  *          [--handles a,b,c [--force]] [--limit 5]
- *          [--sources instagram,google,news,web,facebook,facebook-posts,discovery] [--process-only]
+ *          [--sources instagram,google,news,web,facebook,facebook-posts,discovery,artists] [--process-only]
  *          [--max-items 5] (new items per web source, Facebook pages, discovery posts: for checks)
  * --dry-run shows what the run would do and cost without calling any paid service.
  * --batch sends model calls through the Message Batches API (half price, slower).
@@ -24,6 +24,8 @@ import { fetchGoogleEvents, fetchNewsCalendars } from "../../src/lib/pipeline/so
 import { fetchCalendars } from "../../src/lib/pipeline/calendars";
 import { fetchFacebookEvents } from "../../src/lib/pipeline/facebook";
 import { fetchFacebookPosts } from "../../src/lib/pipeline/facebook-posts";
+import { trackArtists } from "../../src/lib/pipeline/artist-tracking";
+import { HttpYoutube, findArtistVideos } from "../../src/lib/pipeline/youtube";
 import { runDiscovery } from "../../src/lib/pipeline/discovery";
 import { processPosts } from "../../src/lib/pipeline/process";
 import { ingestion, translation } from "../../src/config";
@@ -63,6 +65,12 @@ main("ingest", async (pool, report, args) => {
   }
   if (!args.processOnly && args.sources.includes("discovery")) {
     report.discovery = await runDiscovery(pool, apify, { jobName, dryRun: args.dryRun, city: args.city, maxPosts: args.maxItems, force });
+  }
+  if (!args.processOnly && args.sources.includes("artists")) {
+    // Tracked artists (Prompt 10): their new posts are sorted; show announcements join the posts processed below.
+    const tracking = { jobName, dryRun: args.dryRun, batch: args.batch, slugs: args.slugs, limit: args.maxItems };
+    report.artists = await trackArtists(pool, apify, llm, { ...tracking, force });
+    report.artistVideos = await findArtistVideos(pool, new HttpYoutube(), llm, tracking);
   }
   const pipeline = await processPosts(pool, { llm, apify }, { jobName, dryRun: args.dryRun, batch: args.batch, expectedNewPosts });
   report.pipeline = pipeline;

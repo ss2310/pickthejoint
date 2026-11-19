@@ -30,6 +30,7 @@ const FIELD_LABEL: Record<string, string> = {
   "artist:name": "name of a performer or band", "artist:genre": "music genre or art form", "artist:hometown": "name of a place",
   "artist:bio": "profile of a performer", "organiser:name": "name of an event organiser", "organiser:bio": "profile of an organiser",
   "series:name": "name of a festival or recurring event", "series:description": "description of a recurring event", "series:recurrence": "when it recurs",
+  "artist_post:update_text": "one-line note about a performer's new release", "artist_video:blurb": "one-sentence note about a video",
   "area:name": "name of a neighbourhood", "city:name": "name of a city", "city:state": "name of an Indian state",
 };
 
@@ -63,6 +64,10 @@ WITH src AS (
   SELECT 'area', a.id, 'name', a.name, 6 FROM areas a JOIN cities c ON c.id = a.city_id WHERE c.is_live
   UNION ALL
   SELECT 'city', c.id, f.field, f.text, 0 FROM cities c, LATERAL (VALUES ('name', c.name), ('state', c.state)) f(field, text) WHERE c.is_live
+  UNION ALL
+  SELECT 'artist_post', ap.id, 'update_text', ap.update_text, 7 FROM artist_posts ap WHERE ap.label = 'new_release' AND NOT ap.hidden
+  UNION ALL
+  SELECT 'artist_video', av.id, 'blurb', av.blurb, 8 FROM artist_videos av WHERE av.status = 'approved'
 )
 SELECT src.type, src.id, src.field, src.text, md5(src.text) AS hash
 FROM src LEFT JOIN translations t

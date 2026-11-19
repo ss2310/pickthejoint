@@ -1,9 +1,10 @@
 /** Shared page for artists and organisers: bio, official links, upcoming and past events, sources. */
 import type { Metadata } from "next";
-import { displayTimeZone } from "@/config";
+import { artistTracking, displayTimeZone } from "@/config";
 import { alternates, localePath, messages } from "@/lib/locale";
-import { listEvents, type EventCard, type PersonDetail } from "@/lib/queries";
+import { artistUpdates, artistVideos, listEvents, liveCities, type EventCard, type PersonDetail } from "@/lib/queries";
 import { ids, officialLinks, pageLd, type Ld } from "@/lib/schema";
+import { ShowsByCity, UpdateList, VideoList } from "./artist-media";
 import { EventList, ExternalLinks, Hero, JsonLd, SourceList, Updated, initials } from "./ui";
 
 export interface EntityKind {
@@ -45,6 +46,11 @@ export async function EntityPage({ kind, p }: { kind: EntityKind; p: PersonDetai
   const descriptor = [p.genre, p.hometown ? t.from(p.hometown) : null].filter(Boolean).join(", ");
   const works = p.notable_works ?? [];
   const path = `/${kind.base}/${p.slug}`;
+  const isArtist = kind.base === "artists";
+  // Artists only (Prompt 10): release notes, approved official videos, and their shows city by city.
+  const [updates, videos, cities] = isArtist
+    ? await Promise.all([artistUpdates(p.id), artistVideos([p.slug], artistTracking.videosPerArtist), liveCities()])
+    : [[], [], []];
 
   return (
     <main>
@@ -67,6 +73,9 @@ export async function EntityPage({ kind, p }: { kind: EntityKind; p: PersonDetai
         {past.length > 0 && (
           <section aria-labelledby="past-heading"><h2 id="past-heading">{t.past}</h2><EventList events={past} empty="" /></section>
         )}
+        {isArtist && <UpdateList updates={updates} timeZone={displayTimeZone} />}
+        {isArtist && <VideoList videos={videos} heading={t.videos} id="videos-heading" note={t.videosNote(p.name)} />}
+        {isArtist && <ShowsByCity name={p.name} upcoming={upcoming} past={past} cities={cities} />}
         {works.length > 0 && (
           <section aria-labelledby="works-heading">
             <h2 id="works-heading">{t.works}</h2>

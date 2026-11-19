@@ -74,7 +74,7 @@ export function normalisePost(item: Record<string, unknown>): NormalisedPost | n
 }
 
 /** The handle a profile URL points at ("https://www.instagram.com/name/" -> "name"). */
-function profileOf(inputUrl: unknown): string | null {
+export function profileOf(inputUrl: unknown): string | null {
   const m = typeof inputUrl === "string" ? inputUrl.match(/instagram\.com\/([A-Za-z0-9._]+)\/?(?:[?#].*)?$/) : null;
   return m ? m[1].toLowerCase() : null;
 }
