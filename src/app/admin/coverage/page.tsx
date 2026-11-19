@@ -1,10 +1,10 @@
-import { budgets } from "@/config";
+import { budgets, sourcing } from "@/config";
 import { getPool } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin-session";
 import { coverageReport, storedReports, weekStartIst, type CoverageReport } from "@/lib/coverage";
 import { monthSpend } from "@/lib/budget-guard";
 import { sourcingData } from "@/lib/pipeline/sourcing-data";
-import { addFacebookPage, toggleFacebookPage } from "../sourcing-actions";
+import { addFacebookPage, setFacebookPageTier, toggleFacebookPage } from "../sourcing-actions";
 import { Msg, ist, usd } from "../components";
 
 export const metadata = { title: "Coverage" };
@@ -48,11 +48,20 @@ export default async function CoveragePage({ searchParams }: { searchParams: Pro
   const state = (await pool.query<{ source_key: string; last_fetched_at: Date | null }>(
     "SELECT source_key, last_fetched_at FROM source_state WHERE source_key LIKE 'web:%' OR source_key LIKE 'facebook:%' OR source_key LIKE 'discovery:%' ORDER BY source_key")).rows;
   const lastRead = new Map(state.map((s) => [s.source_key, s.last_fetched_at]));
-  const pages = (await pool.query<{ id: number; city: string; page: string; name: string | null; added_via: string; active: boolean; last_checked_at: Date | null; events_seen: number }>(
-    `SELECT f.id, c.slug AS city, f.page, f.name, f.added_via, f.active, f.last_checked_at, f.events_seen
-     FROM facebook_pages f JOIN cities c ON c.id = f.city_id ORDER BY f.active DESC, f.events_seen DESC, f.page`)).rows;
+  const pages = (await pool.query<{
+    id: number; city: string; page: string; name: string | null; added_via: string; active: boolean; last_checked_at: Date | null; events_seen: number;
+    tier: "A" | "B" | "C"; city_filter: boolean; posts_checked_at: Date | null; posts_seen: number; posts_kept: number; event_posts: number;
+  }>(
+    `SELECT f.id, c.slug AS city, f.page, f.name, f.added_via, f.active, f.last_checked_at, f.events_seen,
+            f.tier, f.city_filter, f.posts_checked_at, f.posts_seen, coalesce(p.kept, 0)::int AS posts_kept, coalesce(p.events, 0)::int AS event_posts
+     FROM facebook_pages f JOIN cities c ON c.id = f.city_id
+     LEFT JOIN LATERAL (
+       SELECT count(*) AS kept, count(*) FILTER (WHERE rp.processing_state IN ('published', 'merged', 'queued_review')) AS events
+       FROM raw_posts rp WHERE rp.source_kind = 'facebook' AND rp.handle = f.page AND rp.city_id = f.city_id AND rp.shortcode LIKE 'fbp:%') p ON true
+     ORDER BY f.active DESC, coalesce(p.events, 0) DESC, f.events_seen DESC, f.tier, f.page`)).rows;
   const spend = {
-    discovery: await monthSpend("discovery", { pool }), facebookEvents: await monthSpend("facebookEvents", { pool }), webCalendars: await monthSpend("webCalendars", { pool }),
+    discovery: await monthSpend("discovery", { pool }), facebookEvents: await monthSpend("facebookEvents", { pool }),
+    facebookPosts: await monthSpend("facebookPosts", { pool }), webCalendars: await monthSpend("webCalendars", { pool }),
   };
   const data = sourcingData();
   return (
@@ -65,6 +74,7 @@ export default async function CoveragePage({ searchParams }: { searchParams: Pro
       </p>
       <p className="small">
         This month: discovery {usd(spend.discovery)} of {usd(budgets.discovery)} · Facebook events {usd(spend.facebookEvents)} of {usd(budgets.facebookEvents)} ·
+        {" "}Facebook posts {usd(spend.facebookPosts)} of {usd(budgets.facebookPosts)} ·
         {" "}web calendars and Facebook reading (model) {usd(spend.webCalendars)} of {usd(budgets.webCalendars)}
       </p>
 
@@ -91,22 +101,37 @@ export default async function CoveragePage({ searchParams }: { searchParams: Pro
 
       <h2>Facebook pages ({pages.filter((p) => p.active).length} on)</h2>
       <p className="muted small">
-        Public pages whose upcoming events are read once a week, logged out, through Apify. Pages linked from venue and organiser pages are added
-        automatically. Last weekly run: {cities.map((c) => `${c.name} ${ist(lastRead.get(`facebook:${c.slug}`))}`).join(" · ")}
+        Public pages read logged out, through Apify. Two things are read: each page&apos;s newest posts (tier A every two days, B weekly, C every
+        two weeks; a page with {sourcing.facebookPosts.quietAfterPosts} posts read and no event among them drops to the tier C pace by itself), and its
+        Facebook Events tab (weekly, taking turns). Pages linked from venue and organiser pages are added automatically.
+        Last events run: {cities.map((c) => `${c.name} ${ist(lastRead.get(`facebook:${c.slug}`))}`).join(" · ")}
       </p>
       <form action={addFacebookPage} className="form-grid">
         <input type="hidden" name="city" value="indore" />
-        <label className="field">Facebook page link<input name="url" placeholder="https://www.facebook.com/somevenue" required /></label>
-        <label className="field">Name (optional)<input name="name" /></label>
-        <p><button className="button">Add page</button></p>
+        <label className="field">Facebook page links, one per line (a name may follow after a comma)
+          <textarea name="url" rows={3} placeholder="https://www.facebook.com/somevenue" required />
+        </label>
+        <label className="field">Tier
+          <select name="tier" defaultValue="B"><option value="A">A: every two days</option><option value="B">B: weekly</option><option value="C">C: every two weeks</option></select>
+        </label>
+        <p><button className="button">Add pages</button></p>
       </form>
       <table className="admin-table">
-        <thead><tr><th>Page</th><th>City</th><th>Added</th><th>Events seen</th><th>Last checked</th><th></th></tr></thead>
+        <thead><tr><th>Page</th><th>City</th><th>Added</th><th>Tier</th><th>Posts read</th><th>Posts kept</th><th>Led to an event</th><th>Posts last read</th><th>Events tab</th><th>Events tab last read</th><th></th></tr></thead>
         <tbody>
           {pages.map((p) => (
             <tr key={p.id} className={p.active ? undefined : "muted"}>
-              <td><a href={`https://www.facebook.com/${p.page}/upcoming_hosted_events`} rel="noopener nofollow" target="_blank">{p.name ?? p.page}</a></td>
-              <td>{p.city}</td><td>{p.added_via === "manual" ? "by hand" : "from a page link"}</td><td>{p.events_seen}</td><td className="small">{ist(p.last_checked_at)}</td>
+              <td><a href={`https://www.facebook.com/${p.page}/`} rel="noopener nofollow" target="_blank">{p.name ?? p.page}</a>{p.city_filter ? <span className="muted small"> (only posts naming the city)</span> : null}</td>
+              <td>{p.city}</td><td>{p.added_via === "manual" ? "by hand" : p.added_via === "import" ? "from a list" : "from a page link"}</td>
+              <td>
+                <form action={setFacebookPageTier}>
+                  <input type="hidden" name="id" value={p.id} />
+                  <select name="tier" defaultValue={p.tier} aria-label={`Tier for ${p.name ?? p.page}`}><option>A</option><option>B</option><option>C</option></select>
+                  {" "}<button className="button ghost small-button">Set</button>
+                </form>
+              </td>
+              <td>{p.posts_seen}</td><td>{p.posts_kept}</td><td>{p.event_posts}</td><td className="small">{ist(p.posts_checked_at)}</td>
+              <td>{p.events_seen}</td><td className="small">{ist(p.last_checked_at)}</td>
               <td><form action={toggleFacebookPage}><input type="hidden" name="id" value={p.id} /><button className="button ghost small-button">{p.active ? "Switch off" : "Switch on"}</button></form></td>
             </tr>
           ))}

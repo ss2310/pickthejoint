@@ -18,7 +18,8 @@
     "job:enrich": "tsx scripts/jobs/enrich.ts",
     "translate:backfill": "tsx scripts/translate-backfill.ts",
     "census": "tsx scripts/census.ts",
-    "railway:release": "npm run db:migrate && npm run db:seed && npm run import:handles -- data/handles-indore.csv --if-empty"
+    "import:facebook-pages": "tsx scripts/import-facebook-pages.ts",
+    "railway:release": "npm run db:migrate && npm run db:seed && npm run import:handles -- data/handles-indore.csv --if-empty && npm run import:facebook-pages -- data/facebook-pages-indore.csv"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.10.0",

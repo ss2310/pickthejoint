@@ -1,6 +1,7 @@
 {
   "indore": {
     "censusBbox": [22.6, 75.72, 22.85, 76.0],
+    "cityNames": ["इंदौर", "इन्दौर"],
     "hashtags": ["indoreevents", "eventsinindore", "indoreevent", "indorenightlife", "indorecomedy", "indoremusic"],
     "calendars": [
       {

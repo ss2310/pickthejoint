@@ -3,12 +3,13 @@
  *   1. scrape Instagram handles that are due (tier A daily, tier B weekly)
  *   2. fetch the Google event results and enabled news roundups (once a day each),
  *      the web calendars (every few days), public Facebook events and the
- *      hashtag discovery pull (weekly)
+ *      hashtag discovery pull (weekly), and the newest posts of the Facebook
+ *      pages that are due (every 2, 7 or 14 days by tier)
  *   3. process everything waiting: filter -> extract -> match / dedup -> publish
  *
  * Usage: npm run job:ingest -- [--dry-run] [--batch] [--city indore]
  *          [--handles a,b,c [--force]] [--limit 5]
- *          [--sources instagram,google,news,web,facebook,discovery] [--process-only]
+ *          [--sources instagram,google,news,web,facebook,facebook-posts,discovery] [--process-only]
  *          [--max-items 5] (new items per web source, Facebook pages, discovery posts: for checks)
  * --dry-run shows what the run would do and cost without calling any paid service.
  * --batch sends model calls through the Message Batches API (half price, slower).
@@ -22,6 +23,7 @@ import { scrapeInstagram, type ScrapeReport } from "../../src/lib/pipeline/scrap
 import { fetchGoogleEvents, fetchNewsCalendars } from "../../src/lib/pipeline/sources";
 import { fetchCalendars } from "../../src/lib/pipeline/calendars";
 import { fetchFacebookEvents } from "../../src/lib/pipeline/facebook";
+import { fetchFacebookPosts } from "../../src/lib/pipeline/facebook-posts";
 import { runDiscovery } from "../../src/lib/pipeline/discovery";
 import { processPosts } from "../../src/lib/pipeline/process";
 import { ingestion, translation } from "../../src/config";
@@ -50,6 +52,11 @@ main("ingest", async (pool, report, args) => {
   }
   if (!args.processOnly && args.sources.includes("facebook")) {
     report.facebook = await fetchFacebookEvents(pool, apify, llm, { jobName, dryRun: args.dryRun, city: args.city, maxPages: args.maxItems, force, batch: args.batch });
+  }
+  if (!args.processOnly && args.sources.includes("facebook-posts")) {
+    const posts = await fetchFacebookPosts(pool, apify, { jobName, dryRun: args.dryRun, city: args.city, maxPages: args.maxItems, force });
+    report.facebookPosts = posts;
+    if (args.dryRun) expectedNewPosts += posts.maxPosts;
   }
   if (!args.processOnly && args.sources.includes("discovery")) {
     report.discovery = await runDiscovery(pool, apify, { jobName, dryRun: args.dryRun, city: args.city, maxPosts: args.maxItems, force });

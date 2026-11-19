@@ -54,18 +54,45 @@ export async function addCensusPlace(form: FormData): Promise<void> {
   back("/admin/venues", r.written ? `${name} added to the census.` : `${name} is already in the census.`);
 }
 
-/** Adds a public Facebook page whose upcoming events are read weekly. */
+const pageTier = (form: FormData) => (["A", "B", "C"].includes(text(form, "tier")) ? text(form, "tier") : "B");
+
+/**
+ * Adds public Facebook pages, one link per line (a name may follow the link after a comma).
+ * Their posts and upcoming events are then read on the pace of the chosen tier.
+ */
 export async function addFacebookPage(form: FormData): Promise<void> {
   await requireAdmin();
   const pool = getPool();
-  const page = facebookPage(text(form, "url"));
-  if (!page) back("/admin/coverage", "That is not a link to a Facebook page (for example https://www.facebook.com/somevenue).");
   const city = (await pool.query<{ id: number }>("SELECT id FROM cities WHERE slug = $1", [text(form, "city") || "indore"])).rows[0];
   if (!city) back("/admin/coverage", "Unknown city.");
-  const r = await pool.query(
-    `INSERT INTO facebook_pages (city_id, page, name, added_via) VALUES ($1,$2,$3,'manual')
-     ON CONFLICT (city_id, page) DO UPDATE SET active = true`, [city!.id, page, text(form, "name") || null]);
-  back("/admin/coverage", r.rowCount ? `facebook.com/${page} will be read with the next weekly run.` : "Already on the list.");
+  const tier = pageTier(form);
+  const lines = text(form, "url").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 300);
+  if (lines.length === 0) back("/admin/coverage", "Paste at least one Facebook page link.");
+  let added = 0, known = 0;
+  const bad: string[] = [];
+  for (const line of lines) {
+    const [link, ...rest] = line.split(",");
+    const page = facebookPage(link);
+    if (!page) { bad.push(link.trim().slice(0, 60)); continue; }
+    const name = rest.join(",").trim() || null;
+    // Facebook addresses ignore case: a page already on record under another spelling is switched back on, not added twice.
+    const existing = await pool.query("UPDATE facebook_pages SET active = true, name = coalesce(name, $3) WHERE city_id = $1 AND lower(page) = lower($2)", [city!.id, page, name]);
+    if (existing.rowCount) { known++; continue; }
+    await pool.query("INSERT INTO facebook_pages (city_id, page, name, tier, added_via) VALUES ($1,$2,$3,$4,'manual')", [city!.id, page, name, tier]);
+    added++;
+  }
+  back("/admin/coverage", [
+    `${added} page(s) added as tier ${tier}`, known ? `${known} already on the list` : "",
+    bad.length ? `${bad.length} not a Facebook page link (for example https://www.facebook.com/somevenue): ${bad.slice(0, 5).join(", ")}` : "",
+  ].filter(Boolean).join("; ") + ".");
+}
+
+/** How often a page's posts are read: A every two days, B weekly, C every two weeks. */
+export async function setFacebookPageTier(form: FormData): Promise<void> {
+  await requireAdmin();
+  const { rows } = await getPool().query<{ page: string; tier: string }>(
+    "UPDATE facebook_pages SET tier = $2 WHERE id = $1 RETURNING page, tier", [Number(form.get("id")), pageTier(form)]);
+  back("/admin/coverage", rows[0] ? `facebook.com/${rows[0].page} is now tier ${rows[0].tier}.` : "Not found.");
 }
 
 export async function toggleFacebookPage(form: FormData): Promise<void> {

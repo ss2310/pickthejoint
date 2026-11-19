@@ -1,5 +1,5 @@
 /** Prompt 9: wider sourcing. Apify, the model and every web page are stand-ins; nothing paid is called. */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Pool } from "pg";
 import { freshDb } from "./helpers";
 import { seed } from "../db/seed";
@@ -11,6 +11,8 @@ import { censusGaps, linkCensus, overpassQuery, parseOverpass, runCensus } from 
 import { parseCensusCsv } from "../src/lib/pipeline/census-import";
 import { eventLinks, eventText, fetchCalendars, jsonLdEvents, localWhen, pageText, sitemapUrls } from "../src/lib/pipeline/calendars";
 import { facebookEvent, facebookPage, fetchFacebookEvents } from "../src/lib/pipeline/facebook";
+import { dueFacebookPages, facebookPost, fetchFacebookPosts, postCaption } from "../src/lib/pipeline/facebook-posts";
+import { importFacebookPages, parsePagesCsv } from "../scripts/import-facebook-pages";
 import { runDiscovery } from "../src/lib/pipeline/discovery";
 import { retierHandles, suggestedTier } from "../src/lib/pipeline/tiering";
 import { attachSeries, matchSeries } from "../src/lib/pipeline/series";
@@ -374,6 +376,157 @@ describe("public Facebook events", () => {
     const after = Number((await pool.query("SELECT confidence FROM events WHERE id = $1", [known])).rows[0].confidence);
     expect(after).toBeCloseTo(before + 0.1, 5);
     expect((await pool.query("SELECT source_type FROM sources WHERE event_id = $1 ORDER BY id", [known])).rows.map((r) => r.source_type)).toEqual(["instagram", "web"]);
+  });
+});
+
+describe("Facebook page posts", () => {
+  const PAGES_CSV = [
+    "page_url,name,city,tier,category,city_filter",
+    "https://www.facebook.com/indorievents/,indori events,Indore,A,Event Promoter & Festival Organizer,no",
+    "https://www.facebook.com/unseenmp/,Unseen MP,Indore,B,Event Promoter & Festival Organizer,yes",
+    'https://www.facebook.com/p/IIT-Indore-100064798209779/,IIT Indore,Indore,C,"University, College & Campus Fest",no',
+    "https://www.facebook.com/events/123/,Not a page,Indore,B,x,no",
+    "https://www.facebook.com/IndoriEvents,Same page again,Indore,B,x,no",
+  ].join("\n");
+  afterEach(() => { delete process.env.FACEBOOK_POSTS; });
+
+  it("parses page addresses, the page list and actor items", () => {
+    expect(facebookPage("https://www.facebook.com/p/IIT-Indore-100064798209779/")).toBe("100064798209779");
+    expect(facebookPage("https://www.facebook.com/61569233605840/")).toBe("61569233605840");
+    const parsed = parsePagesCsv(PAGES_CSV);
+    expect(parsed.rows.map((r) => [r.page, r.tier, r.cityFilter])).toEqual([["indorievents", "A", false], ["unseenmp", "B", true], ["100064798209779", "C", false]]);
+    expect(parsed.rows[2].category).toBe("University, College & Campus Fest");
+    expect(parsed.errors.map((e) => e.line)).toEqual([5, 6]);
+
+    const post = facebookPost({
+      postId: "777", url: "https://www.facebook.com/indorievents/posts/sufi-night/777/", time: "2026-11-18T10:00:00.000Z", text: "Sufi Night",
+      inputUrl: "https://www.facebook.com/indorievents/", pageName: "indorievents",
+      media: [{ thumbnail: "https://cdn.example/t.jpg", photo_image: { uri: "https://cdn.example/full.jpg" }, ocrText: "SUFI NIGHT 21 NOV" }, { thumbnail: "https://cdn.example/v.jpg", __typename: "Video" }],
+    })!;
+    expect(post).toMatchObject({ id: "777", page: "indorievents", mediaUrls: ["https://cdn.example/full.jpg", "https://cdn.example/v.jpg"], isVideo: true });
+    expect(post.postedAt?.toISOString()).toBe("2026-11-18T10:00:00.000Z");
+    expect(postCaption(post)).toBe("Sufi Night\n\nText on the image (read automatically, may contain errors):\nSUFI NIGHT 21 NOV");
+    expect(facebookPost({ url: "https://www.facebook.com/x/videos/123456789/", timestamp: 1795000000 })).toMatchObject({ id: "123456789", isVideo: true, text: "" });
+    expect(facebookPost({ error: "no_results", inputUrl: "https://www.facebook.com/x/" })).toBeNull();
+  });
+
+  it("loads the list once, keeping tiers and switches the admin has changed", async () => {
+    expect(await importFacebookPages(pool, PAGES_CSV, true)).toMatchObject({ inserted: 3, alreadyKnown: 0 });
+    expect((await pool.query("SELECT count(*)::int AS n FROM facebook_pages")).rows[0].n).toBe(0); // a dry run writes nothing
+    const first = await importFacebookPages(pool, PAGES_CSV);
+    expect(first).toMatchObject({ inserted: 3, alreadyKnown: 0 });
+    expect(first.errors).toHaveLength(2);
+    await pool.query("UPDATE facebook_pages SET tier = 'C', active = false WHERE page = 'indorievents'");
+    expect(await importFacebookPages(pool, PAGES_CSV)).toMatchObject({ inserted: 0, alreadyKnown: 3 });
+    expect((await pool.query("SELECT page, tier, active, city_filter, added_via FROM facebook_pages ORDER BY id")).rows).toEqual([
+      { page: "indorievents", tier: "C", active: false, city_filter: false, added_via: "import" },
+      { page: "unseenmp", tier: "B", active: true, city_filter: true, added_via: "import" },
+      { page: "100064798209779", tier: "C", active: true, city_filter: false, added_via: "import" },
+    ]);
+  });
+
+  it("reads new posts of the pages that are due, drops other cities for free, and feeds the same pipeline", async () => {
+    await importFacebookPages(pool, PAGES_CSV);
+    const now = new Date();
+    const ago = (days: number) => new Date(now.getTime() - days * 86_400_000).toISOString();
+    const day = inDays(5);
+    const respond = (input: Record<string, unknown>) => {
+      const urls = (input.startUrls as { url: string }[]).map((u) => u.url);
+      const items: Record<string, unknown>[] = [];
+      if (urls.includes("https://www.facebook.com/indorievents/")) {
+        items.push(
+          { postId: "1001", url: "https://www.facebook.com/indorievents/posts/1001/", time: ago(1), inputUrl: "https://www.facebook.com/indorievents/",
+            text: "Sufi Night this Saturday, 8 PM at Phoenix Citadel, Indore. Tickets ₹499.", media: [{ photo_image: { uri: "https://cdn.example/sufi.jpg" }, ocrText: "SUFI NIGHT" }] },
+          { postId: "1002", url: "https://www.facebook.com/indorievents/posts/1002/", time: ago(2), inputUrl: "https://www.facebook.com/indorievents/", text: "Thank you for all the love, Indore!" },
+          { postId: "1003", url: "https://www.facebook.com/indorievents/posts/1003/", time: ago(60), inputUrl: "https://www.facebook.com/indorievents/", text: "An old post the date filter should have left out." },
+        );
+      }
+      if (urls.includes("https://www.facebook.com/unseenmp/")) {
+        items.push(
+          { postId: "2001", url: "https://www.facebook.com/unseenmp/posts/2001/", time: ago(1), inputUrl: "https://www.facebook.com/unseenmp/", text: "Food festival in Bhopal this Sunday, entry free." },
+          { postId: "2002", url: "https://www.facebook.com/unseenmp/posts/2002/", time: ago(1), inputUrl: "https://www.facebook.com/unseenmp/", text: "इंदौर में कवि सम्मेलन, शनिवार शाम 7 बजे, रवींद्र नाट्य गृह। प्रवेश निःशुल्क।" },
+        );
+      }
+      if (urls.includes("https://www.facebook.com/100064798209779/")) items.push({ error: "no_results", inputUrl: "https://www.facebook.com/100064798209779/" });
+      return items;
+    };
+    const apify = new FakeApify(respond);
+    const llm = new FakeLlm((text) => (text.includes("Sufi Night")
+      ? extraction([ev({ title: f("Sufi Night"), venue_name: f("Phoenix Citadel"), start_date: f(day), start_time: f("20:00"), price_text: f("₹499") })])
+      : extraction([ev({ title: f("Kavi Sammelan"), venue_name: f("Ravindra Natya Grah"), start_date: f(day), start_time: f("19:00"), price_text: f<string>(null), is_free: f(true), category: f("religious-and-cultural") })])));
+
+    // Off until the job service says otherwise, so a deploy alone starts no paid runs.
+    expect((await fetchFacebookPosts(pool, apify, { jobName: "test", city: "indore" })).status).toMatch(/^switched off/);
+    process.env.FACEBOOK_POSTS = "on";
+
+    const dry = await fetchFacebookPosts(pool, apify, { jobName: "test", city: "indore", dryRun: true, now });
+    expect(dry).toMatchObject({ pagesKnown: 3, pagesDue: 3, maxPosts: 8, estimatedUsd: 0.056, postsNew: 0, status: "dry run: would read 3 page(s), up to 8 posts, at most $0.06" });
+    expect(apify.calls).toHaveLength(0);
+
+    const rep = await fetchFacebookPosts(pool, apify, { jobName: "test", city: "indore", now });
+    expect(rep).toMatchObject({ status: "ok", pagesChecked: 3, actorRuns: 2, postsReturned: 6, postsNew: 3, alreadyStored: 0, otherCity: 1, skipped: 2, pagesWithNothing: [], spentUsd: 0.042 });
+    expect(rep.skipReasons[0]).toMatch(/^older than asked for/);
+    expect(rep.skipReasons[1]).toBe("actor said for 100064798209779: no_results");
+    const since = new Date(now.getTime() - 21 * 86_400_000).toISOString().slice(0, 10);
+    // Tier A and B pages take 3 posts each and share a run; the tier C page takes 2.
+    expect(apify.calls.map((c) => c.input)).toEqual([
+      { startUrls: [{ url: "https://www.facebook.com/indorievents/" }, { url: "https://www.facebook.com/unseenmp/" }], resultsLimit: 3, onlyPostsNewerThan: since },
+      { startUrls: [{ url: "https://www.facebook.com/100064798209779/" }], resultsLimit: 2, onlyPostsNewerThan: since },
+    ]);
+    expect(apify.calls[0].actorId).toBe("apify/facebook-posts-scraper");
+    expect((await pool.query("SELECT sub_budget, estimated_usd FROM cost_log WHERE NOT dry_run ORDER BY id")).rows).toEqual([
+      { sub_budget: "facebookPosts", estimated_usd: "0.035000" }, { sub_budget: "facebookPosts", estimated_usd: "0.007000" }]);
+    expect((await pool.query("SELECT shortcode, handle, post_type, source_kind, media_urls FROM raw_posts ORDER BY shortcode")).rows).toEqual([
+      { shortcode: "fbp:1001", handle: "indorievents", post_type: "image", source_kind: "facebook", media_urls: ["https://cdn.example/sufi.jpg"] },
+      { shortcode: "fbp:1002", handle: "indorievents", post_type: null, source_kind: "facebook", media_urls: [] },
+      { shortcode: "fbp:2002", handle: "unseenmp", post_type: null, source_kind: "facebook", media_urls: [] },
+    ]);
+    expect((await pool.query("SELECT page, posts_seen FROM facebook_pages ORDER BY id")).rows).toEqual([
+      { page: "indorievents", posts_seen: 3 }, { page: "unseenmp", posts_seen: 2 }, { page: "100064798209779", posts_seen: 0 }]);
+
+    // Nothing is due straight after; two days later only the tier A page is, and only for posts since its last check.
+    expect(await fetchFacebookPosts(pool, apify, { jobName: "test", city: "indore", now })).toMatchObject({ status: "no page is due", pagesDue: 0 });
+    const later = new Date(now.getTime() + 2 * 86_400_000);
+    const again = await fetchFacebookPosts(pool, apify, { jobName: "test", city: "indore", now: later });
+    expect(again).toMatchObject({ pagesDue: 1, pagesChecked: 1, postsNew: 0, alreadyStored: 2 });
+    expect(apify.calls[2].input).toEqual({
+      startUrls: [{ url: "https://www.facebook.com/indorievents/" }], resultsLimit: 3, onlyPostsNewerThan: new Date(now.getTime() - 86_400_000).toISOString().slice(0, 10) });
+
+    // The normal pipeline takes it from there: the rules drop the thank-you post for free, the other two are read with their image.
+    const fetched: string[] = [];
+    const result = await processPosts(pool, { llm, apify, fetchFn: site({}, fetched) }, { jobName: "test" });
+    expect(result.filter.byRules).toMatchObject({ event: 2, not_event: 1, unclear: 0 });
+    expect(fetched).toEqual(["https://cdn.example/sufi.jpg"]);
+    expect(llm.texts.find((t) => t.includes("Sufi Night"))).toContain(
+      'Source: Post on the public Facebook page "indori events", facebook.com/indorievents (listed as: Event Promoter & Festival Organizer).');
+    expect(result.bySource["facebook:indorievents"]).toMatchObject({ created: 1 });
+    expect(result.bySource["facebook:unseenmp"]).toMatchObject({ created: 1 });
+    const events = (await pool.query<{ title: string; url: string; source_type: string }>(
+      "SELECT e.title, s.url, s.source_type FROM events e JOIN sources s ON s.event_id = e.id WHERE e.is_published ORDER BY e.title")).rows;
+    expect(events).toEqual([
+      { title: "Kavi Sammelan", url: "https://www.facebook.com/unseenmp/posts/2002/", source_type: "web" },
+      { title: "Sufi Night", url: "https://www.facebook.com/indorievents/posts/1001/", source_type: "web" },
+    ]);
+  });
+
+  it("slows a page that never yields an event, and stops at its monthly limit without failing the job", async () => {
+    process.env.FACEBOOK_POSTS = "on";
+    await importFacebookPages(pool, PAGES_CSV);
+    const checked = new Date(Date.now() - 3 * 86_400_000);
+    await pool.query("UPDATE facebook_pages SET posts_checked_at = $1", [checked]);
+    // Three days on, only the tier A page is due...
+    expect((await dueFacebookPages(pool, cityId)).map((p) => [p.page, p.pace])).toEqual([["indorievents", "A"]]);
+    // ...unless 12 of its posts have been read without one leading to an event: then it waits two weeks like tier C.
+    await pool.query("UPDATE facebook_pages SET posts_seen = 12 WHERE page = 'indorievents'");
+    expect(await dueFacebookPages(pool, cityId)).toEqual([]);
+    await pool.query("INSERT INTO raw_posts (shortcode, handle, post_url, source_kind, city_id, processing_state) VALUES ('fbp:9','indorievents','u','facebook',$1,'published')", [cityId]);
+    expect((await dueFacebookPages(pool, cityId)).map((p) => p.pace)).toEqual(["A"]);
+
+    await pool.query("INSERT INTO cost_log (bucket, sub_budget, service, estimated_usd, job_name) VALUES ('scrape','facebookPosts','apify',9.99,'ingest')");
+    const apify = new FakeApify(() => []);
+    const rep = await fetchFacebookPosts(pool, apify, { jobName: "test", city: "indore" });
+    expect(rep.status).toMatch(/^stopped by the budget guard/);
+    expect(apify.calls).toHaveLength(0);
   });
 });
 

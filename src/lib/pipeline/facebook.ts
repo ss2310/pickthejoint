@@ -20,8 +20,14 @@ import { localDate } from "./text";
 
 const NOT_PAGES = new Set(["events", "groups", "pages", "profile.php", "watch", "share", "sharer", "marketplace", "hashtag", "photo.php", "story.php", "people"]);
 
-/** A Facebook page's path ("fleamarketindore") from a link to it; null for anything that is not a page. */
+/**
+ * A Facebook page's path ("fleamarketindore") from a link to it; null for anything that is not a page.
+ * A page without a username has an address like /p/Some-Name-61565553603715/: its path is the number,
+ * which facebook.com/<number> also leads to.
+ */
 export function facebookPage(url: string | null | undefined): string | null {
+  const numbered = (url ?? "").trim().match(/^(?:https?:\/\/)?(?:www\.|m\.|web\.)?facebook\.com\/p\/[^/?#]*?-?(\d{8,})\/?(?:[?#].*)?$/i);
+  if (numbered) return numbered[1];
   const m = (url ?? "").trim().match(/^(?:https?:\/\/)?(?:www\.|m\.|web\.)?facebook\.com\/([A-Za-z0-9.\-]{3,80})\/?(?:[?#].*)?$/i);
   if (!m || NOT_PAGES.has(m[1].toLowerCase())) return null;
   return m[1];
@@ -115,7 +121,8 @@ export async function fetchFacebookEvents(
   for (const city of cities) {
     if (!opts.dryRun) rep.pagesAdded += await syncFacebookPages(pool, city.id);
     const pages = (await pool.query<{ id: number; page: string }>(
-      "SELECT id, page FROM facebook_pages WHERE city_id = $1 AND active ORDER BY last_checked_at NULLS FIRST, id LIMIT $2",
+      // Pages that have shown an event before are read every week; the rest take turns.
+      "SELECT id, page FROM facebook_pages WHERE city_id = $1 AND active ORDER BY (events_seen > 0) DESC, last_checked_at NULLS FIRST, id LIMIT $2",
       [city.id, Math.min(opts.maxPages ?? cfg.maxPagesPerRun, cfg.maxPagesPerRun)])).rows;
     rep.pagesKnown += Number((await pool.query<{ n: string }>("SELECT count(*) AS n FROM facebook_pages WHERE city_id = $1 AND active", [city.id])).rows[0].n);
     if (pages.length === 0) { rep.status = "no Facebook pages on record yet"; continue; }
