@@ -223,8 +223,11 @@ export const secondLook = {
   /** Web searches one lookup may make. Page fetch is never offered. */
   maxSearches: 2,
   maxTokens: 4000,
-  /** Reserved against the budget before a lookup's search request; replaced by the measured cost. Unproven until a real run. */
-  estResearchUsd: 0.09,
+  /**
+   * Reserved against the budget before a lookup's search request; replaced by the measured cost.
+   * First production run (19 Nov 2026): 3 lookups cost $0.391 in all, about $0.13 each with reading the notes.
+   */
+  estResearchUsd: 0.12,
   /** A looked-up fact below this confidence is shown to the reviewer but not counted as found. */
   minConfidence: 0.8,
   /** How often the reading of a lookup's notes is tried before the lookup is recorded as having found nothing. */
