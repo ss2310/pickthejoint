@@ -1,5 +1,6 @@
 /** Small pieces shared by the admin pages. Server components only. */
 import type { LookupResult, Need } from "@/lib/pipeline/second-look";
+import { FACT_KEYS } from "@/lib/practical";
 import type { SubmissionFields } from "@/lib/submissions";
 
 export const ist = (d: Date | string | null | undefined) =>
@@ -107,7 +108,33 @@ export function FieldInputs({ f, cities, city, categories }: {
       <label className="field wide">Instagram post<input type="url" name="instagram_url" defaultValue={f.instagram_url} /></label>
       <label className="field wide">Performers (comma-separated)<input type="text" name="performers" defaultValue={f.performers} /></label>
       <label className="field wide">Organiser{mark("organiser")}<input type="text" name="organiser" defaultValue={f.organiser} /></label>
+      <details className="wide" open={!!f.practical}>
+        <summary>Practical details{f.practical ? ` (${Object.keys(f.practical).length})` : ""}</summary>
+        <div className="form-grid"><PracticalFieldInputs values={f.practical} /></div>
+      </details>
       <label className="field wide">Note (not published)<textarea name="note" defaultValue={f.note} rows={2} /></label>
+    </>
+  );
+}
+
+const FACT_LABELS: Record<string, string> = {
+  doors_time: "Doors open (HH:MM)", age_limit: "Age limit", entry_rules: "Entry rules", seating: "Seated or standing",
+  indoor_outdoor: "Indoors or outdoors", language: "Language", food_drink: "Food and drink", dress_code: "Dress code",
+  refund_policy: "Refund or cancellation terms", accessibility: "Wheelchair access (venue)", parking: "Parking (venue)",
+  how_to_reach: "How to reach (venue)",
+};
+
+/** The practical questions (Prompt 11). An empty box stores nothing; "(venue)" answers show on every event there. */
+export function PracticalFieldInputs({ values }: { values?: Partial<Record<string, string>> }) {
+  return (
+    <>
+      {FACT_KEYS.map((key) => (
+        <label key={key} className={key === "doors_time" ? "field" : "field wide"}>{FACT_LABELS[key]}
+          {key === "doors_time"
+            ? <input type="time" name="fact_doors_time" defaultValue={values?.[key] ?? ""} />
+            : <input type="text" name={`fact_${key}`} defaultValue={values?.[key] ?? ""} maxLength={240} />}
+        </label>
+      ))}
     </>
   );
 }

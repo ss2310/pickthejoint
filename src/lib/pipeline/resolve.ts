@@ -13,6 +13,7 @@ import type { Pool, PoolClient } from "pg";
 import { ingestion } from "../../config";
 import type { ExtractedEvent, Extraction } from "./extract";
 import type { LlmClient, LlmRequest } from "./llm";
+import { storeFacts } from "../practical";
 import { attachSeries } from "./series";
 import {
   daysBetween, diceSimilarity, handleKey, isClockTime, isIsoDate, localDate, nameKey, sameVenueKey, slugify, titleSimilarity, zonedToUtc,
@@ -288,6 +289,7 @@ async function createEvent(db: Db, ctx: PostContext, e: ExtractedEvent, venueId:
   await addSource(db, rows[0].id, ctx);
   await attachPeople(db, rows[0].id, e);
   await attachSeries(db, [rows[0].id]);
+  await storeFacts(db, rows[0].id, e.practical, { type: "post", url: ctx.postUrl, rawPostId: ctx.rawPostId });
   return rows[0].id;
 }
 
@@ -311,6 +313,8 @@ export async function mergeInto(db: Db, eventId: number, ctx: PostContext, e: Ex
   );
   await addSource(db, eventId, ctx);
   await attachPeople(db, eventId, e);
+  // A further post may answer a practical question the first one did not; it never overrides an answer.
+  await storeFacts(db, eventId, e.practical, { type: "post", url: ctx.postUrl || null, rawPostId: ctx.rawPostId || null });
 }
 
 /** Cancellation, postponement or change: update the event it refers to, if we can tell which one. */

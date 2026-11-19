@@ -13,6 +13,7 @@ import { requireAdmin } from "@/lib/admin-session";
 import { EditError, editEvent } from "@/lib/event-edit";
 import type { ExtractedEvent } from "@/lib/pipeline/extract";
 import { AnthropicLlm } from "@/lib/pipeline/llm";
+import { setFactsByAdmin } from "@/lib/practical";
 import { applyFound, lookupOf, publishQueuedPost, type LookupResult } from "@/lib/pipeline/second-look";
 import {
   approveSubmission, createDraft, fieldsFromExtraction, readFields, rejectSubmission, type SubmissionFields,
@@ -249,6 +250,21 @@ export async function saveEventEdit(form: FormData): Promise<void> {
   }
   refreshPublicPages();
   back(listed, msg);
+}
+
+/** The admin's practical details for an event (Prompt 11): changed boxes are saved, emptied ones removed. */
+export async function saveEventFacts(form: FormData): Promise<void> {
+  await requireAdmin();
+  const id = num(form, "id");
+  let changes: string[] = [];
+  try {
+    changes = await setFactsByAdmin(getPool(), id, readFields(form).practical ?? {});
+  } catch (err) {
+    unstable_rethrow(err);
+    back(`/admin/events/${id}`, `Could not save: ${(err as Error).message}`);
+  }
+  refreshPublicPages();
+  back(`/admin/events/${id}`, changes.length ? `Practical details saved: ${changes.join(", ")}.` : "Nothing changed.");
 }
 
 /** Cancel, take down or restore a public page. The reason is required and kept. */

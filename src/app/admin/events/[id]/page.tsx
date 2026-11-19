@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import { getPool } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin-session";
 import { eventFields, loadEvent } from "@/lib/event-edit";
-import { saveEventEdit } from "../../actions";
-import { Msg, ist } from "../../components";
+import { storedFacts } from "@/lib/practical";
+import { saveEventEdit, saveEventFacts } from "../../actions";
+import { Msg, PracticalFieldInputs, ist } from "../../components";
 
 export const metadata = { title: "Edit event" };
 
@@ -19,6 +20,10 @@ export default async function EditEvent({ params, searchParams }: { params: Prom
   const actions = (await pool.query<{ action: string; reason: string; created_at: Date }>(
     "SELECT action, reason, created_at FROM event_actions WHERE event_id = $1 ORDER BY created_at DESC LIMIT 8", [e.id])).rows;
   const path = `/${e.city_slug}/events/${e.slug}`;
+  const facts = await storedFacts(pool, e.id);
+  const factRows = (await pool.query<{ entity_type: string; fact_key: string; source_type: string; source_url: string | null; updated_at: Date }>(
+    `SELECT pf.entity_type, pf.fact_key, pf.source_type, pf.source_url, pf.updated_at FROM practical_facts pf JOIN events e ON e.id = $1
+     WHERE (pf.entity_type = 'event' AND pf.entity_id = e.id) OR (pf.entity_type = 'venue' AND pf.entity_id = e.venue_id) ORDER BY pf.fact_key`, [e.id])).rows;
 
   return (
     <>
@@ -62,6 +67,23 @@ export default async function EditEvent({ params, searchParams }: { params: Prom
             Performers, organisers and sources are not changed here.
           </p>
         </form>
+      </section>
+      <section className="form-card">
+        <h2>Practical details</h2>
+        <p className="small muted">
+          Shown on the event page under &quot;Before you go&quot;, each with its source. What you type here is shown as &quot;checked by Pick the Joint&quot;.
+          Empty a box to remove that answer. &quot;(venue)&quot; answers show on every event at this venue. No model is called.
+        </p>
+        <form action={saveEventFacts} className="form-grid">
+          <input type="hidden" name="id" value={e.id} />
+          <PracticalFieldInputs values={facts} />
+          <p className="wide"><button className="button">Save the practical details</button></p>
+        </form>
+        {factRows.length > 0 && (
+          <ul className="small notes">
+            {factRows.map((r) => <li key={`${r.entity_type}-${r.fact_key}`}>{r.fact_key}: from {r.source_type}{r.source_url ? <> (<a href={r.source_url} target="_blank" rel="noopener nofollow">source</a>)</> : null}, {ist(r.updated_at)}</li>)}
+          </ul>
+        )}
       </section>
       {actions.length > 0 && (
         <section>

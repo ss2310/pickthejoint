@@ -37,6 +37,8 @@ export interface JobArgs {
   retier: boolean;
   /** Housekeeping: store last week's coverage report now instead of waiting for Monday. */
   coverage: boolean;
+  /** Ingest: draft this week's roundup now instead of waiting for Thursday (with --force, draft it again). */
+  roundup: boolean;
 }
 
 export const ALL_SOURCES = ["instagram", "google", "news", "web", "facebook", "facebook-posts", "discovery", "artists"];
@@ -66,6 +68,7 @@ export function parseArgs(argv: string[]): JobArgs {
     maxItems: value("max-items") ? Number(value("max-items")) : undefined,
     retier: argv.includes("--retier"),
     coverage: argv.includes("--coverage"),
+    roundup: argv.includes("--roundup"),
   };
 }
 

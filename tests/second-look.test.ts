@@ -99,7 +99,7 @@ function event(over: Partial<ExtractedEvent> = {}): ExtractedEvent {
     announcement: "new_event", title: f("Stylista Winter Edit"), start_date: f(inDays(5)), start_time: f("17:00"),
     end_date: f<string>(null), end_time: f<string>(null), venue_name: f<string>(null), venue_instagram_handle: null,
     city: f("Indore"), area: f<string>(null), price_text: f<string>(null), is_free: f<boolean>(null), booking_url: f<string>(null),
-    performers: [], organiser: f<string>(null), organiser_instagram_handle: null, category: f("shopping"), ...over,
+    performers: [], organiser: f<string>(null), organiser_instagram_handle: null, category: f("shopping"), practical: [], ...over,
   };
 }
 

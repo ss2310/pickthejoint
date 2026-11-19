@@ -11,6 +11,7 @@
  *          [--handles a,b,c [--force]] [--limit 5]
  *          [--sources instagram,google,news,web,facebook,facebook-posts,discovery,artists] [--process-only]
  *          [--max-items 5] (new items per web source, Facebook pages, discovery posts: for checks)
+ *          [--roundup [--force]] (draft this week's guide now instead of on Thursday; --force drafts it again)
  * --dry-run shows what the run would do and cost without calling any paid service.
  * --batch sends model calls through the Message Batches API (half price, slower).
  */
@@ -30,7 +31,8 @@ import { runDiscovery } from "../../src/lib/pipeline/discovery";
 import { processPosts } from "../../src/lib/pipeline/process";
 import { ingestion, translation } from "../../src/config";
 import { translatePending } from "../../src/lib/pipeline/translate";
-import { secondLook } from "../../src/config";
+import { displayTimeZone, roundups, secondLook } from "../../src/config";
+import { draftRoundups } from "../../src/lib/roundups";
 import { AnthropicResearch } from "../../src/lib/pipeline/research";
 import { runSecondLook } from "../../src/lib/pipeline/second-look";
 
@@ -82,6 +84,16 @@ main("ingest", async (pool, report, args) => {
     } catch (err) {
       // A second-look problem must not fail the job: the items simply stay in the queue for a person.
       report.secondLook = { error: (err as Error).message.slice(0, 300) };
+    }
+  }
+  // Thursday (IST): draft the weekly guide for the Friday to Thursday ahead (Prompt 11). It waits for the admin to publish.
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: displayTimeZone, weekday: "long" }).format(new Date());
+  if (roundups.enabled && (args.roundup || weekday === roundups.weekday)) {
+    try {
+      report.roundups = await draftRoundups(pool, llm, { jobName, dryRun: args.dryRun, batch: args.batch, city: args.city, force: args.roundup && args.force });
+    } catch (err) {
+      // A guide that could not be drafted must not fail the job; the admin can draft it from the admin area.
+      report.roundups = { error: (err as Error).message.slice(0, 300) };
     }
   }
   if (args.dryRun) return;

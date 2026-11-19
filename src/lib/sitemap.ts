@@ -6,6 +6,7 @@ import { DATE_HUBS } from "./hubs";
 import { isoDay } from "./format";
 import { LANG_TAG, localePath } from "./locale";
 import { zonedToUtc } from "./pipeline/text";
+import { publishedRoundupPaths } from "./roundups";
 import { areasWithEvents, cityLastChange, listCategories, listEvents, liveCities, sitemapRows } from "./queries";
 
 export const SITEMAP_TYPES = ["hubs", "events", "venues", "artists", "organisers", "series", "pages"] as const;
@@ -60,6 +61,14 @@ async function hubEntries(now: Date): Promise<SitemapEntry[]> {
     }
     for (const a of await areasWithEvents(city.id)) out.push({ path: `${base}/area/${a.slug}`, lastmod: changed });
   }
+  // Weekly guides (Prompt 11): the index and every published guide, which stay live as the archive.
+  const guides = await publishedRoundupPaths(getPool());
+  const latest = new Map<string, Date>();
+  for (const g of guides) {
+    out.push({ path: `/${g.city}/guide/${g.slug}`, lastmod: g.updated_at });
+    if (!latest.has(g.city) || latest.get(g.city)! < g.updated_at) latest.set(g.city, g.updated_at);
+  }
+  for (const [city, at] of latest) out.push({ path: `/${city}/guide`, lastmod: at });
   return out;
 }
 

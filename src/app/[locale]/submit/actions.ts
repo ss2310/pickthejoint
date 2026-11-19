@@ -107,7 +107,17 @@ export async function sendEvent(form: FormData): Promise<void> {
 
   const fields = readFields(form);
   const submitter = readSubmitter(form);
-  const city = await cityOf(form);
+  let city = await cityOf(form);
+  if (fields.for_event) {
+    // Practical details for a listed event: its name, day and city come from the listing, not the form.
+    const ev = (await pool.query<{ title: string; day: string; city: string }>(
+      `SELECT e.title, e.local_date::text AS day, c.slug AS city FROM events e JOIN cities c ON c.id = e.city_id
+       WHERE e.id = $1 AND e.is_published AND c.is_live`, [fields.for_event])).rows[0];
+    if (!ev) redirect(localePath("/submit", locale));
+    fields.title = ev!.title;
+    fields.date = ev!.day;
+    city = (await liveCities()).find((c) => c.slug === ev!.city) ?? null;
+  }
   const token = String(form.get("draft") ?? "");
   const existing = token ? await getDraft(token) : null;
   if (existing?.fields.uncertain) fields.uncertain = existing.fields.uncertain;

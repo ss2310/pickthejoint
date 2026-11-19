@@ -7,7 +7,7 @@ import type { ExtractedEvent } from "@/lib/pipeline/extract";
 import { applyFound, lookupOf } from "@/lib/pipeline/second-look";
 import { emptyFields, fieldsFromExtraction, getSubmission, type SubmissionFields } from "@/lib/submissions";
 import { saveItem } from "../../actions";
-import { FieldInputs, Msg, Raw, SecondLook, Thumb } from "../../components";
+import { FieldInputs, Msg, PracticalFieldInputs, Raw, SecondLook, Thumb } from "../../components";
 
 export const metadata = { title: "Edit review item" };
 
@@ -44,6 +44,11 @@ export default async function EditItem({ params, searchParams }: { params: Promi
       "SELECT e.title, e.description, '/' || c.slug || '/events/' || e.slug AS path FROM events e JOIN cities c ON c.id = e.city_id WHERE e.id = $1", [item.item_id])).rows[0] ?? null;
   }
   const editable = ["submission", "raw_post", "poster"].includes(item.item_type);
+  // Practical details sent for an event already listed: only those details are edited here.
+  const forEvent = item.item_type === "submission" && fields.for_event
+    ? (await pool.query<{ title: string; path: string }>(
+        "SELECT e.title, '/' || c.slug || '/events/' || e.slug AS path FROM events e JOIN cities c ON c.id = e.city_id WHERE e.id = $1", [fields.for_event])).rows[0] ?? null
+    : null;
 
   return (
     <>
@@ -53,7 +58,23 @@ export default async function EditItem({ params, searchParams }: { params: Promi
       {item.status !== "open" && <p className="banner">This item is {item.status}: {item.resolution_note}</p>}
       <div className="two-col">
         <section className="form-card">
-          {editable && (
+          {forEvent && (
+            <form action={saveItem} className="form-grid">
+              <input type="hidden" name="id" value={item.id} />
+              <input type="hidden" name="for_event" value={fields.for_event!} />
+              <input type="hidden" name="title" value={fields.title} />
+              <input type="hidden" name="date" value={fields.date} />
+              <p className="wide">Practical details for <a href={forEvent.path} target="_blank">{forEvent.title}</a>. Saved answers are shown on its page as
+                {" "}&quot;sent in by the organiser and checked by us&quot;; an empty box changes nothing.</p>
+              <PracticalFieldInputs values={fields.practical} />
+              <label className="field wide">Note (not published)<textarea name="note" defaultValue={fields.note} rows={2} /></label>
+              <p className="wide">
+                <button className="button" name="intent" value="publish">Save the details on the event</button>{" "}
+                <button className="button ghost" name="intent" value="save">Save only</button>
+              </p>
+            </form>
+          )}
+          {editable && !forEvent && (
             <form action={saveItem} className="form-grid">
               <input type="hidden" name="id" value={item.id} />
               <FieldInputs f={fields} cities={cities} city={city} categories={categories} />

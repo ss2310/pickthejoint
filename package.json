@@ -17,6 +17,7 @@
     "job:housekeeping": "tsx scripts/jobs/housekeeping.ts",
     "job:enrich": "tsx scripts/jobs/enrich.ts",
     "job:second-look": "tsx scripts/jobs/second-look.ts",
+    "job:facts-backfill": "tsx scripts/jobs/facts-backfill.ts",
     "translate:backfill": "tsx scripts/translate-backfill.ts",
     "census": "tsx scripts/census.ts",
     "import:facebook-pages": "tsx scripts/import-facebook-pages.ts",

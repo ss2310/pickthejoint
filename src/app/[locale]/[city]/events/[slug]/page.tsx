@@ -2,11 +2,14 @@ import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
 import PlainLink from "next/link";
 import { VideoList } from "@/components/artist-media";
+import { PracticalFacts } from "@/components/practical-facts";
+import { getPool } from "@/lib/db";
+import { eventFacts } from "@/lib/practical";
 import { EventList, Hero, JsonLd, Link, Updated, priceLabel } from "@/components/ui";
 import { artistTracking } from "@/config";
 import { clock, longDate, plainDate, stamp } from "@/lib/format";
 import { categoryName } from "@/lib/hubs";
-import { alternates, localePath, messages, setLocale } from "@/lib/locale";
+import { alternates, getLocale, localePath, messages, setLocale } from "@/lib/locale";
 import { artistVideos, getEvent, listEvents, movedEventSlug, type EventDetail } from "@/lib/queries";
 import { abs, eventImagePath, eventLd, eventPath, ids, pageLd, venuePath } from "@/lib/schema";
 
@@ -72,10 +75,11 @@ export default async function EventPage({ params }: Props) {
   }
   const m = messages().event;
 
-  const [atVenue, alike, videos] = await Promise.all([
+  const [atVenue, alike, videos, facts] = await Promise.all([
     e.venue_id ? listEvents({ venueId: e.venue_id, excludeId: e.id, limit: 5 }) : [],
     e.category_id ? listEvents({ cityId: e.city_id, categoryId: e.category_id, excludeId: e.id, limit: 5 }) : [],
     artistVideos(e.artists.map((a) => a.slug), artistTracking.videosOnEventPage),
+    eventFacts(getPool(), e.id, e.venue_id, getLocale()),
   ]);
   // "Get to know the artist": one or two approved official videos for the first two performers who have any.
   const entity = messages().entity;
@@ -144,6 +148,8 @@ export default async function EventPage({ params }: Props) {
               </dl>
 
               {e.description && <section aria-labelledby="about-heading"><h2 id="about-heading">{m.about}</h2><p className="about-text">{e.description}</p></section>}
+
+              <PracticalFacts e={e} facts={facts} />
 
               <section aria-labelledby="source-heading" className="provenance">
                 <h2 id="source-heading">{m.source}</h2>

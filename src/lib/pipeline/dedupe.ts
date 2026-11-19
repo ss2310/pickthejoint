@@ -11,6 +11,7 @@
  */
 import type { Pool, PoolClient } from "pg";
 import { ingestion } from "../../config";
+import { moveFacts } from "../practical";
 import { nameKey, sameVenueKey, titleSimilarity } from "./text";
 
 export interface DedupeReport {
@@ -39,6 +40,7 @@ async function mergeVenue(db: PoolClient, keep: VenueRow, drop: VenueRow) {
        how_to_reach = coalesce(k.how_to_reach, d.how_to_reach), description = coalesce(k.description, d.description),
        venue_type = coalesce(k.venue_type, d.venue_type), official_links = d.official_links || k.official_links, updated_at = now()
      FROM venues d WHERE k.id = $1 AND d.id = $2`, [keep.id, drop.id]);
+  await moveFacts(db, "venue", drop.id, keep.id);
   await db.query("DELETE FROM venues WHERE id = $1", [drop.id]);
 }
 
@@ -69,6 +71,7 @@ async function mergeEvent(db: PoolClient, keep: EventRow, drop: EventRow) {
     `INSERT INTO event_organisers (event_id, organiser_id)
      SELECT $1, organiser_id FROM event_organisers WHERE event_id = $2 ON CONFLICT DO NOTHING`, [keep.id, drop.id]);
   await db.query("UPDATE review_queue SET item_id = $1 WHERE item_type = 'event' AND item_id = $2", [keep.id, drop.id]);
+  await moveFacts(db, "event", drop.id, keep.id);
   // Its sources and links now live on the kept listing; the leftover rows go with it.
   await db.query("DELETE FROM events WHERE id = $1", [drop.id]);
 }

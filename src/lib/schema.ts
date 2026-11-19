@@ -192,6 +192,29 @@ export function faqLd(faqs: { question: string; answer: string }[]): Ld {
   };
 }
 
+/** A weekly guide (Prompt 11): an article by Pick the Joint about one city's week, naming the events it lists. */
+export function articleLd(a: {
+  path: string; headline: string; description: string; published: Date; modified: Date; city: string; eventPaths: string[];
+}): Ld {
+  const url = abs(localePath(a.path));
+  return clean({
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "@id": `${url}#article`,
+    headline: a.headline,
+    description: a.description,
+    url,
+    mainEntityOfPage: { "@id": url },
+    datePublished: a.published.toISOString(),
+    dateModified: a.modified.toISOString(),
+    inLanguage: LANG_TAG[getLocale()],
+    author: { "@id": ids.organization },
+    publisher: { "@id": ids.organization },
+    about: { "@type": "City", name: a.city },
+    mentions: a.eventPaths.map((p) => ({ "@id": ids.event(p) })),
+  });
+}
+
 /**
  * The page itself: its address, who publishes it, what it is about and when
  * its content last changed. `modified` must be the same instant the page shows
