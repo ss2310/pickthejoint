@@ -198,6 +198,19 @@ export async function getEvent(citySlug: string, slug: string, locale: Locale = 
   return rows[0] ?? null;
 }
 
+/**
+ * Where an event went when its title or date was corrected: the slug it has now, or null.
+ * The old address is kept in `event_redirects` and answers with a permanent redirect.
+ */
+export async function movedEventSlug(citySlug: string, oldSlug: string): Promise<string | null> {
+  const { rows } = await getPool().query<{ slug: string }>(
+    `SELECT e.slug FROM event_redirects r JOIN cities c ON c.id = r.city_id JOIN events e ON e.id = r.event_id
+     WHERE c.slug = $1 AND r.old_slug = $2 AND e.is_published AND c.is_live`,
+    [citySlug.toLowerCase(), oldSlug],
+  );
+  return rows[0]?.slug ?? null;
+}
+
 export interface VenueDetail extends Named {
   city_id: number; city_slug: string; city_name: string; city_state: string; timezone: string; venue_type: string | null;
   address: string | null; lat: number | null; lng: number | null; capacity: number | null; parking: string | null;

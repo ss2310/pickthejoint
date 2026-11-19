@@ -1,4 +1,5 @@
 /** Small pieces shared by the admin pages. Server components only. */
+import type { LookupResult, Need } from "@/lib/pipeline/second-look";
 import type { SubmissionFields } from "@/lib/submissions";
 
 export const ist = (d: Date | string | null | undefined) =>
@@ -27,6 +28,51 @@ export function Raw({ label, value }: { label: string; value: unknown }) {
       <summary>{label}</summary>
       <pre>{JSON.stringify(value, null, 2)}</pre>
     </details>
+  );
+}
+
+const LOOKED_FOR: Record<Need, string> = { title: "Title", venue: "Venue", date: "Date", city: "City" };
+const host = (url: string) => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; } };
+
+/**
+ * What the second look found for a queued post: each fact with the page it came from, the short note,
+ * and anything that was found but left out, with the reason. Shown on the queue and on the edit page.
+ */
+export function SecondLook({ lookup }: { lookup: LookupResult | null }) {
+  if (!lookup) return null;
+  const nothing = lookup.found.length === 0;
+  return (
+    <div className={`banner${nothing ? " banner-warn" : ""}`}>
+      <p className="small">
+        <strong>Second look</strong> · {ist(lookup.at)} · looked for: {lookup.needed.map((n) => LOOKED_FOR[n].toLowerCase()).join(", ")}
+      </p>
+      {nothing ? <p><strong>Nothing found.</strong></p> : (
+        <ul className="facts-list">
+          {lookup.found.map((f) => (
+            <li key={f.field}>
+              {LOOKED_FOR[f.field]}: <strong>{f.value}</strong> <span className="muted small">{f.confidence.toFixed(2)}</span>
+              {f.differsFromPost && <> <span className="tag tag-warn">the post said: {f.differsFromPost}</span></>}
+              <ul className="small notes">
+                {f.sources.map((s) => (
+                  <li key={s.url}>
+                    from <a href={s.url} rel="noopener nofollow" target="_blank">{s.title || host(s.url)}</a> ({host(s.url)}{s.strength === "weak" ? ", a weak source" : ""})
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      )}
+      {lookup.note && <p className="small">{lookup.note}</p>}
+      {lookup.leftOut.length > 0 && (
+        <>
+          <p className="small muted">Found but left out:</p>
+          <ul className="small notes">
+            {lookup.leftOut.map((l, i) => <li key={i}>{LOOKED_FOR[l.field]}: {l.value} ({l.reason})</li>)}
+          </ul>
+        </>
+      )}
+    </div>
   );
 }
 

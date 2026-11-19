@@ -132,6 +132,8 @@ export const budgets = {
   newsCalendars: num("NEWS_CALENDARS_BUDGET_USD", 5),
   /** Sub-limit inside "model" for entity enrichment: research with web search, and the page text. */
   enrichment: num("ENRICHMENT_BUDGET_USD", 20),
+  /** Sub-limit inside "model" for the second look: one web search lookup for a queued post with a missing fact. */
+  secondLook: num("SECOND_LOOK_BUDGET_USD", 8),
   /** Sub-limit inside "model" for translating page text into Hindi. */
   translation: num("TRANSLATION_BUDGET_USD", 5),
   /** Sub-limit inside "model" for public submissions: reading snapped posters and pre-screening. */
@@ -161,6 +163,7 @@ export const budgets = {
 
 export type BudgetBucket = "scrape" | "model";
 export type SubBudget =
+  | "secondLook"
   | "reelTranscript" | "googleEvents" | "newsCalendars" | "enrichment" | "translation" | "submissions" | "search" | "citations"
   | "discovery" | "facebookEvents" | "facebookPosts" | "webCalendars" | "artistTracking" | "artistText";
 
@@ -169,6 +172,7 @@ export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   googleEvents: "scrape",
   newsCalendars: "model",
   enrichment: "model",
+  secondLook: "model",
   translation: "model",
   submissions: "model",
   search: "model",
@@ -233,6 +237,42 @@ export const enrichment = {
     "bandcamp.com": "Bandcamp", "music.amazon.in": "Amazon Music", "primevideo.com": "Prime Video", "netflix.com": "Netflix",
     "hotstar.com": "JioHotstar", "sonyliv.com": "SonyLIV", "zee5.com": "ZEE5",
   } as Record<string, string>,
+} as const;
+
+/**
+ * Second look (the owner's decisions of 19 Nov 2026). A post left in the review
+ * queue only because its title, venue, date or city could not be established is
+ * checked against our own listings (free) and then looked up once through
+ * Anthropic's web search. We never fetch the pages themselves: the facts come
+ * from the search results, and a fact counts only when a returned page about the
+ * same event states it.
+ */
+export const secondLook = {
+  /** Off until SECOND_LOOK=on is set on the job service, so a deploy alone never starts paid lookups. */
+  get enabled() { return process.env.SECOND_LOOK === "on"; },
+  /**
+   * "Click first" is the default: a found fact waits in the review queue for one click.
+   * SECOND_LOOK_PUBLISH=on lets a fact that passes every check publish without the click.
+   */
+  get publish() { return process.env.SECOND_LOOK_PUBLISH === "on"; },
+  /** Paid lookups a run makes at most. */
+  maxPerRun: num("SECOND_LOOK_MAX_PER_RUN", 15),
+  /** Web searches one lookup may make. Page fetch is never offered. */
+  maxSearches: 2,
+  maxTokens: 4000,
+  /**
+   * Reserved against the budget before a lookup's search request; replaced by the measured cost.
+   * First production run (19 Nov 2026): 3 lookups cost $0.391 in all, about $0.13 each with reading the notes.
+   */
+  estResearchUsd: 0.12,
+  /** A looked-up fact below this confidence is shown to the reviewer but not counted as found. */
+  minConfidence: 0.8,
+  /** How often the reading of a lookup's notes is tried before the lookup is recorded as having found nothing. */
+  maxReadAttempts: 2,
+  /** Ticketing sites whose own event pages count as good sources (they sell the ticket; we link to them for booking). */
+  goodDomains: ["district.in", "bookmyshow.com"],
+  /** Weak on top of `enrichment.weakDomains` (which has allevents.in): copies of AllEvents' data. Such a fact needs a second site. */
+  weakDomains: ["stayhappening.com", "happeningnext.com"],
 } as const;
 
 /**

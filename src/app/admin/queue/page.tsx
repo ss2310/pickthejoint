@@ -2,9 +2,10 @@ import Link from "next/link";
 import { getPool } from "@/lib/db";
 import { queueCounts, queueItems, type QueueItem } from "@/lib/admin-data";
 import { requireAdmin } from "@/lib/admin-session";
+import { lookupOf } from "@/lib/pipeline/second-look";
 import type { SubmissionRow } from "@/lib/submissions";
 import { approveItem, rejectItem } from "../actions";
-import { Msg, Raw, Thumb, ist } from "../components";
+import { Msg, Raw, SecondLook, Thumb, ist } from "../components";
 
 export const metadata = { title: "Review queue" };
 
@@ -91,6 +92,8 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
 
               {item.item_type === "raw_post" && (() => {
                 const e = p.event as Record<string, Fact> | null;
+                const lookup = lookupOf(p);
+                const approve = !e ? "Fill in" : lookup && lookup.found.length > 0 ? "Approve with the found facts" : "Approve as shown";
                 return (
                   <>
                     <p className="small">{String(p.source ?? "")} {p.handle ? `@${p.handle}` : ""} · {p.url ? <a href={String(p.url)} rel="noopener nofollow">source post</a> : null}</p>
@@ -100,7 +103,8 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
                         <FactLine label="Venue" f={e.venue_name} /><FactLine label="City" f={e.city} /><FactLine label="Price" f={e.price_text} /><FactLine label="Category" f={e.category} />
                       </ul>
                     ) : <Raw label="Payload" value={p} />}
-                    {open && <Buttons item={item} from={from} approveLabel={e ? "Approve as shown" : "Fill in"} editable />}
+                    <SecondLook lookup={lookup} />
+                    {open && <Buttons item={item} from={from} approveLabel={approve} editable />}
                   </>
                 );
               })()}

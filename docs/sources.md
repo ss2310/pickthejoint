@@ -84,6 +84,17 @@ OpenStreetMap through the Overpass API: free, no account; the data is © OpenStr
 
 `data/series.json` seeds series pages for Indore's recurring festivals before their dates are announced. Every sentence rests on a listed source (Incredible India, MP Tourism, Wikipedia, Free Press Journal), and no dates are written there: each year's events come in from the sources and attach by title words and month.
 
+### Web search results (the "second look", 19 Nov 2026)
+
+Not a feed of new events: a way to settle a fact that one of the sources above left uncertain. When a post is queued for review only because its title, venue or date is missing or unsure, or its city could not be told, the mid-tier model makes one request with Anthropic's web search tool (two searches at most) and reports what the result pages state. Code: `src/lib/pipeline/second-look.ts`. Off unless `SECOND_LOOK=on`.
+
+- **We fetch nothing ourselves.** The page fetch tool is not offered in this request, and our own code never requests District, BookMyShow, AllEvents or any other site for it. The only text read is what Anthropic's search returns (result titles, addresses and extracts). District's and BookMyShow's terms prohibit scraping their sites, which is why no reader was built for them (table above); reading a search engine's results about them is a different thing, and is all this does.
+- **What counts as a source:** only a page the search really returned, that is about the same event (same city, same date, similar name or a shared performer) and itself states the fact. An address the model gives that the search did not return is refused.
+- **Good sources (owner's decision, 19 Nov):** an event page on `district.in` or `bookmyshow.com` is enough by itself; they sell the ticket.
+- **Weak sources:** `allevents.in`, its copy sites `stayhappening.com` and `happeningnext.com`, and the listing sites, directories and social pages already treated as weak for enrichment. A fact on one weak site is left out; a second, unrelated site has to agree. AllEvents and its copy sites count as one site between them.
+- **What is stored:** the found fact, the address and title of each page it came from, and a one or two sentence note in our own words, on the review item. When the event is published, each looked-up page that supplied a published fact becomes a row in `sources` (`source_type 'web'`) and is listed on the event page beside the post. No page text is stored or republished.
+- **Cost and limits:** one lookup per post, ever; 15 lookups a run; `SECOND_LOOK_BUDGET_USD` (default $8 a month, inside the model budget). Estimated at about $0.10 a lookup (search request plus the reading of its notes); unproven until the first real run.
+
 ### Community spaces
 
 The city's Reddit community, WhatsApp and Telegram groups are not scraped. They are covered by the poster inbox (Prompt 6) and by posting our roundups there by hand.

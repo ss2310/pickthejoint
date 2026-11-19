@@ -5,12 +5,14 @@
  * of pages the tools actually returned. Facts are later accepted only when
  * their source is on that list, so a made-up address cannot pass as a source.
  *
- * The call goes through the budget guard under the "enrichment" sub-budget.
- * Its cost is tokens at the model's rate plus a fee per search.
+ * The call goes through the budget guard under the "enrichment" sub-budget
+ * unless the caller names another (the second look has its own, with fewer
+ * searches and no page fetch). Its cost is tokens at the model's rate plus a
+ * fee per search.
  */
 import Anthropic from "@anthropic-ai/sdk";
 import type { Pool } from "pg";
-import { enrichment, models } from "../../config";
+import { enrichment, models, type SubBudget } from "../../config";
 import { guardedCall } from "../budget-guard";
 import { tokenCostUsd } from "./llm";
 
@@ -39,7 +41,21 @@ export interface ResearchResult {
   usd: number;
 }
 
-export interface ResearchOptions { jobName: string; dryRun?: boolean; pool?: Pool }
+export interface ResearchOptions {
+  jobName: string; dryRun?: boolean; pool?: Pool;
+  /**
+   * Everything below defaults to entity enrichment's settings, so enrichment calls pass none of it.
+   * The second look passes its own sub-budget and tighter limits.
+   */
+  subBudget?: SubBudget;
+  maxSearches?: number;
+  /** 0 means the page fetch tool is not offered at all: the model works from search results only. */
+  maxFetches?: number;
+  maxTokens?: number;
+  effort?: "low" | "medium" | "high";
+  /** Reserved against the budget before the call; replaced by the measured cost. */
+  estimatedUsd?: number;
+}
 
 export interface ResearchClient {
   research(req: ResearchRequest, opts: ResearchOptions): Promise<ResearchResult | undefined>;
@@ -115,10 +131,20 @@ export class AnthropicResearch implements ResearchClient {
 
   async research(req: ResearchRequest, opts: ResearchOptions): Promise<ResearchResult | undefined> {
     const model = models.mid;
+    const maxFetches = opts.maxFetches ?? enrichment.maxFetches;
+    const tools: Anthropic.ToolUnion[] = [
+      {
+        type: "web_search_20260209", name: "web_search", max_uses: opts.maxSearches ?? enrichment.maxSearches,
+        user_location: req.city ? { type: "approximate", city: req.city, region: req.region, country: "IN", timezone: "Asia/Kolkata" } : undefined,
+      },
+      ...(maxFetches > 0
+        ? [{ type: "web_fetch_20260209" as const, name: "web_fetch" as const, max_uses: maxFetches, max_content_tokens: enrichment.maxFetchTokens }]
+        : []),
+    ];
     return guardedCall<ResearchResult>(
       {
-        bucket: "model", subBudget: "enrichment", service: "anthropic", model: `${model} (web search)`,
-        units: 0, unitLabel: "tokens", estimatedUsd: enrichment.estResearchUsd, jobName: opts.jobName, dryRun: opts.dryRun,
+        bucket: "model", subBudget: opts.subBudget ?? "enrichment", service: "anthropic", model: `${model} (web search)`,
+        units: 0, unitLabel: "tokens", estimatedUsd: opts.estimatedUsd ?? enrichment.estResearchUsd, jobName: opts.jobName, dryRun: opts.dryRun,
       },
       async () => {
         const out: ResearchResult = { id: req.id, ok: false, notes: "", retrieved: [], searches: 0, fetches: 0, inputTokens: 0, outputTokens: 0, usd: 0 };
@@ -131,17 +157,11 @@ export class AnthropicResearch implements ResearchClient {
           for (let turn = 0; turn < MAX_TURNS; turn++) {
             const msg = await this.sdk().messages.create({
               model,
-              max_tokens: 6000,
+              max_tokens: opts.maxTokens ?? 6000,
               system: req.system,
               messages,
-              output_config: { effort: "medium" },
-              tools: [
-                {
-                  type: "web_search_20260209", name: "web_search", max_uses: enrichment.maxSearches,
-                  user_location: req.city ? { type: "approximate", city: req.city, region: req.region, country: "IN", timezone: "Asia/Kolkata" } : undefined,
-                },
-                { type: "web_fetch_20260209", name: "web_fetch", max_uses: enrichment.maxFetches, max_content_tokens: enrichment.maxFetchTokens },
-              ],
+              output_config: { effort: opts.effort ?? "medium" },
+              tools,
             });
             const u = msg.usage;
             out.inputTokens += u.input_tokens + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);

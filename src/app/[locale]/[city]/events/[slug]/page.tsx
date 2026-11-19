@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
 import PlainLink from "next/link";
 import { VideoList } from "@/components/artist-media";
@@ -7,7 +7,7 @@ import { artistTracking } from "@/config";
 import { clock, longDate, plainDate, stamp } from "@/lib/format";
 import { categoryName } from "@/lib/hubs";
 import { alternates, localePath, messages, setLocale } from "@/lib/locale";
-import { artistVideos, getEvent, listEvents, type EventDetail } from "@/lib/queries";
+import { artistVideos, getEvent, listEvents, movedEventSlug, type EventDetail } from "@/lib/queries";
 import { abs, eventImagePath, eventLd, eventPath, ids, pageLd, venuePath } from "@/lib/schema";
 
 // Rebuilt at most every 10 minutes, so a change to the event (new time, cancellation) reaches the page quickly.
@@ -64,7 +64,12 @@ export default async function EventPage({ params }: Props) {
   const { locale, city, slug } = await params;
   setLocale(locale);
   const e = await getEvent(city, slug);
-  if (!e) notFound();
+  if (!e) {
+    // An event whose title or date was corrected has a new address; the old one sends readers and crawlers on.
+    const moved = await movedEventSlug(city, slug);
+    if (moved) permanentRedirect(localePath(eventPath({ city_slug: city.toLowerCase(), slug: moved })));
+    notFound();
+  }
   const m = messages().event;
 
   const [atVenue, alike, videos] = await Promise.all([

@@ -18,10 +18,11 @@ Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 
 | 6 Submissions and admin area | Live. Checks run on 18 Nov: see "Prompt 6 check results" below. Poster email built but waits on the owner's Resend setup |
 | 7 Natural-language search | Live. Checks run on 18 Nov: see "Prompt 7 check results" below |
 | 8 Citation tracker | Live. Baseline week recorded on 18 Nov: see "Prompt 8 check results" below |
+| Second look (owner's decisions of 19 Nov, not a numbered prompt) | Live but **switched off**. Run once on production on 19 Nov (1 merged, 3 lookups found nothing, $0.39). Daily running (`SECOND_LOOK=on` on `ingest`) is the owner's later call. See "Second look" below |
 | 9 Wider sourcing | Live. Built on 18 Nov at the owner's request before the week of cost data ("start now anyway"). See "Prompt 9 check results" below |
 | Facebook page posts (owner's request of 19 Nov, not a numbered prompt) | Live (PR #34). The owner saw the dry-run cost and had it switched on: `FACEBOOK_POSTS=on` was set on `ingest` on 19 Nov, so the first real run is the 06:00 IST job of 20 Nov. See "Facebook page posts" below |
-| 10 Artist tracking and official video | Built on 19 Nov (the owner chose not to wait for cost data once the YouTube key proved free and quick). See "Prompt 10" below for what is checked and what waits |
-| 11 to 15 | Not started. Text in `docs/build-prompts.md` |
+| 10 Artist tracking and official video | Built on 19 Nov (PR #35), brought up to date with main on 20 Nov. The owner has decided to build 10 to 15 now without waiting for cost data. See "Prompt 10" below for what is checked and what waits |
+| 11 to 15 | Not started; to be built next, two per session. Text in `docs/build-prompts.md` |
 
 Production showed 13 Indore events before Prompt 6; one approved submission has been added since.
 
@@ -76,6 +77,7 @@ Production showed 13 Indore events before Prompt 6; one approved submission has 
 - **AI citation checks (Prompt 8), decided 18 Nov:** the owner chose to reuse their GeoGrid tool (`C:\Users\Utsav Goyal\Documents\Joe Roofer Enrichment`), run from their own computer, with all four engines (ChatGPT and Perplexity through DataForSEO, Gemini through OpenRouter, Google AI Overviews: the same sources and routes as GeoGrid's probe), and approved the 30 questions in `data/citation-queries.json`. About $1.35 to $1.80 a run from GeoGrid's existing balances, logged under `CITATIONS_BUDGET_USD` (default $10 a month, scrape budget). GeoGrid itself is not changed and its keys never reach Pick the Joint. The geo-service "probe" (Railway project "Dashboard") could not be reused as is: it asks niche questions about one business and checks for a business name, not our questions and cited domains.
 - **Search (Prompt 7), built 18 Nov:** rules first, the fast tier only for queries the rules cannot read. Limits: 20 model readings an hour and 60 a day per hashed address; `SEARCH_BUDGET_USD` (default $3 a month) and `SEARCH_DAILY_BUDGET_USD` (default $0.25 a UTC day), both inside the model budget and both unset on `web` (defaults apply). Crawlers never trigger a model call. Past a limit the search quietly uses keywords.
 - **Wider sourcing (Prompt 9), decided 18 Nov:** the owner approved the plan (venue census from OpenStreetMap rather than Google Maps; web calendars only where terms and robots.txt allow: MeraEvents, Incredible India, MP Tourism, IIT Indore; Meetup off until decided) and added **public Facebook events, read logged out through Apify**, although Meta's terms and robots.txt prohibit automated collection (owner: "If my facebook profile does not gets logged in i think facebook events can be added"). Monthly limits: discovery $3 and Facebook $5 (scrape), web calendars and Facebook reading $3 (model). District, BookMyShow, AllEvents, Eventbrite, KonfHub, TED, Amar Ujala and BCCI forbid automated collection and are not built; the terms findings for every source are in `docs/sources.md`.
+- **Second look, decided 19 Nov ("Yes, all four"):** (1) a fact found on a District or BookMyShow page counts as well sourced; AllEvents and its copy sites (stayhappening.com, happeningnext.com) are weak, so a fact from them needs a second site to agree; we never fetch any of these sites, the text comes only from Anthropic's web search results. (2) $8 a month inside the model budget (`SECOND_LOOK_BUDGET_USD`), at most 15 lookups a run, one lookup per post ever; the owner was told $0.05 to $0.10 a lookup, unproven until a real run. (3) "Click first": a found fact waits in the review queue for one click and does not publish by itself; `SECOND_LOOK_PUBLISH=on` (off) allows that later. (4) The lookup may settle an unsure title as well as the venue, the date and "could not tell whether the event is in the city". Also agreed: the free check against our own listings comes first; past events, possible duplicates, unmatched cancellations and failed extractions are skipped; the whole feature is off by default; there is a dry-run mode; nothing paid runs and nothing is switched on in production without the owner's yes.
 - **Enrichment (Prompt 4):** facts come from the entity's own Instagram bio (Apify) and from the mid-tier model with Anthropic's web search and web fetch tools. Monthly limit $20 inside the model budget, a quarter of it per weekly run. The owner approved the new `enrich` Railway service.
 
 ## Things learned the hard way
@@ -244,6 +246,37 @@ Each new source was run once on production (on the `enrich` service) as a dry ru
 - **Coverage page** (`/admin/coverage`) reports cost per published event by source. Model spend is recorded per item only from 18 Nov evening, so Instagram's model share before then shows as $0.
 - The `enrich` service is back on `npm run job:enrich` and `30 20 * * 0`.
 
+## Second look (19 Nov, built over two sessions)
+
+On 19 Nov the review queue held 10 scraped posts waiting for a hand lookup, most of them for one missing fact (usually the venue). The second look tries to settle such an item before a person has to. The owner's decisions are under "Decisions the owner has made"; how it works is in `README.md` ("Second look") and at the top of `src/lib/pipeline/second-look.ts`.
+
+- **State:** built, tested with stand-ins (`tests/second-look.test.ts`), and run once on production (below). The cost per lookup is now estimated at about $0.13 ($0.12 reserved for the search request in `secondLook.estResearchUsd`, about $0.01 for reading its notes); the hit rate is not known yet.
+- **Production runs on 19 Nov (owner's yes for each), on the `enrich` service by the one-off method:**
+  - Dry run (free): 10 open items, 6 past, 4 eligible; 1 would merge into a listing, 3 would be looked up, estimated $0.31.
+  - Real run, once: "TiE Global Summit 2026" was merged into `/indore/events/tie-global-summit-2026-indore-2026-12-14` (free). The 3 lookups ("After Hours by NYUP", "PAN-POT Live", "Stylista Winter & Wedding Exhibition") all came back "Nothing found", so nothing was published or made ready to approve. They cost $0.391 in all, so the estimate was raised from $0.09 to $0.12. The same run also translated pending Hindi text ($0.04), because `TRANSLATION=on` is set on `enrich`.
+  - Afterwards `SECOND_LOOK` on `enrich` was set to `off` (the Railway tool cannot delete a variable; anything but `on` counts as off), and `enrich` was put back on `npm run job:enrich` and `30 20 * * 0` with a fresh build.
+  - Not switched on for `ingest`: three misses out of three is too little to judge, and two of them lacked even the city. Try again once newer items missing only the venue are waiting.
+- **Forcing the fresh build** (`connect-service-source`) is refused by this app's auto mode until the owner approves it in chat.
+- **Switched off by default.** `SECOND_LOOK=on` on the `ingest` service makes the daily run finish with it (after new posts are processed, before translation). `SECOND_LOOK_PUBLISH=on` is a second, separate switch for publishing without the click; leave it unset.
+- **Where the result shows:** `/admin/queue`. An item the lookup settled has a "Second look" box with the fact, the page it came from and a note, and its button reads "Approve with the found facts". An item it could not settle says "Nothing found" with the note and anything left out, and stays as it was.
+- **One lookup is per post, not per event:** of a line-up post's several queued events, only the first gets it (`skipped.samePost` in the report).
+- **Migration 014** adds `raw_posts.second_look_at` (the once-per-post marker). 013 is Prompt 10's; migrations are tracked by name, so the order does not matter.
+- **Local dry run:** with a local database in `DATABASE_URL`, `npx tsx scripts/jobs/second-look.ts --dry-run` (no API key needed; it stops at the budget guard). On 19 Nov, against 10 made-up queue items: 6 eligible, 1 would be merged into an existing listing for free, 4 would be looked up, estimated $0.41, nothing sent, nothing changed.
+- **Production dry run (free; needs the owner's yes because it changes a start command for a few minutes):** after the pull request is merged and `web` has deployed (that runs migration 014), follow "To run a one-off script on production" with `npm run job:second-look -- --dry-run` as the `enrich` service's start command, read the report in the deploy logs (`eligible`, `estimate.wouldMergeIntoListed`, `estimate.wouldLookUp`, `estimate.usd`), then put back `npm run job:enrich` and `30 20 * * 0`. The dry run needs no variable set. Expected on the queue as it stood on 19 Nov: 10 open posts, 6 already past, about 4 to try, roughly $0.40 if later run for real.
+- **To switch it on (owner's yes needed; this is the paid step):** set `SECOND_LOOK=on` on `ingest`. The next 06:00 IST run then works through the queue: at most 15 lookups a run and $8 a month. To run it once by itself instead, use the one-off method above with `npm run job:second-look` (no `--dry-run`) and `SECOND_LOOK=on` set on `enrich` for that run, then remove it.
+- **To switch it off:** delete `SECOND_LOOK` from the service. Results already written on review items stay there.
+
+## Correcting a published event (19 Nov, owner's request)
+
+The owner published "Shreya Ghoshal Live – The Unstoppable Tour" with the wrong date and found the admin area could only cancel, take down or restore an event. `/admin/events` now has "Edit the facts" on every event (find a past-dated one with the search box; the list shows upcoming events only).
+
+- **What can be corrected:** title, date, start and end time, last day, venue, category, price, free entry, booking link, and the description. Performers, organisers and sources cannot be edited there yet.
+- **The reason is required** and is kept with what changed (`event_actions`, action `edited`); the edit page lists earlier changes.
+- **Description:** written again from the corrected facts by default (one mid-tier model call, about half a cent, logged like any other). Text the admin types is used as it is, with no model call. If the rewrite fails, the facts are still saved and the message says the description still has the old wording.
+- **Address:** a corrected title or date changes the page's address; the old address redirects permanently (`event_redirects`, migration 015), including its "add to calendar" link. The old share-image address is not redirected.
+- **Hindi:** the Hindi page shows the corrected date at once (dates come from the data); a rewritten description appears in English there until the next `ingest` run translates it.
+- **Checked** with `tests/event-edit.test.ts` and by hand in a local copy of the site; not yet used on production.
+
 ## Facebook page posts (19 Nov, built in the session after Prompt 9)
 
 The owner supplied 120 public Indore Facebook pages (found with Perplexity; now `data/facebook-pages-indore.csv`: 19 tier A, 70 tier B, 31 tier C; 19 are statewide or national pages whose posts are kept only when they name Indore). Only 5 of the 120 use Facebook's Events feature, which was all the Prompt 9 reader read, so the owner chose to have their ordinary posts read as well.
@@ -257,7 +290,7 @@ The owner supplied 120 public Indore Facebook pages (found with Perplexity; now 
 
 ## Prompt 10 (19 Nov): artist tracking and official video
 
-Built in the same session as the Facebook posts reader (that session's second build). See the README section "Artist tracking and official video (Prompt 10)" for how it works.
+Built in the same session as the Facebook posts reader (that session's second build) as PR #35, which then waited unmerged while the second look and the event editor were built. On 20 Nov it was brought up to date with main (one import clash on the event page; 245 tests pass). See the README section "Artist tracking and official video (Prompt 10)" for how it works.
 
 - **Tracking** runs inside the daily `ingest` job (`--sources artists`): artists with an event in the next 30 days (until 7 days after), plus pinned ones; newest 3 Instagram posts every 3 days; fast model sorts them, mid tier writes release lines. Limits: `ARTIST_TRACKING_BUDGET_USD` $5 (scrape), `ARTIST_TEXT_BUDGET_USD` $3 (model).
 - **Video** needs `YOUTUBE_API_KEY` on `web` (the owner was given the steps on 19 Nov) and a reference to it on `ingest`. Without it the run reports "YOUTUBE_API_KEY is not set" and carries on.
@@ -267,6 +300,6 @@ Built in the same session as the Facebook posts reader (that session's second bu
 
 ## Next: Prompt 11
 
-Practical facts and weekly roundups. The text is in `docs/build-prompts.md`. Start it in a new session (two builds were done in this one). The coverage reports stored on 23 and 30 Nov show which Prompt 9 sources earn their keep.
+Practical facts and weekly roundups. The text is in `docs/build-prompts.md`. **The owner decided (said again on 20 Nov) to build Prompts 10 to 15 now, one after another, without waiting for the week of cost data.** Keep to two builds per session. The coverage reports stored on 23 and 30 Nov still show which Prompt 9 sources earn their keep.
 
 Also on 19 Nov: the owner wrote to District asking for a feed or permission (the reply is pending; nothing is built for District), and has a drafted request for AllEvents' paid Events API (its price is unknown; nothing is to be built on it until the owner has seen the price).
