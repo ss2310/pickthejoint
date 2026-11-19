@@ -10,10 +10,12 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { getPool } from "@/lib/db";
 import { queueItem } from "@/lib/admin-data";
 import { requireAdmin } from "@/lib/admin-session";
+import { EditError, editEvent } from "@/lib/event-edit";
 import type { ExtractedEvent } from "@/lib/pipeline/extract";
 import { AnthropicLlm } from "@/lib/pipeline/llm";
+import { applyFound, lookupOf, publishQueuedPost, type LookupResult } from "@/lib/pipeline/second-look";
 import {
-  approveSubmission, createCheckedEvent, createDraft, fieldsFromExtraction, readFields, rejectSubmission, type SubmissionFields,
+  approveSubmission, createDraft, fieldsFromExtraction, readFields, rejectSubmission, type SubmissionFields,
 } from "@/lib/submissions";
 
 const JOB = "admin";
@@ -34,24 +36,12 @@ async function categories() {
   return (await getPool().query<{ slug: string }>("SELECT slug FROM categories ORDER BY sort_order")).rows.map((c) => c.slug);
 }
 
-async function rawPost(id: number) {
-  return (await getPool().query<{ id: number; source_kind: string; post_url: string; city_id: number | null }>(
-    `SELECT rp.id, rp.source_kind, rp.post_url, coalesce(rp.city_id, h.city_id) AS city_id
-     FROM raw_posts rp LEFT JOIN handles h ON h.handle = rp.handle WHERE rp.id = $1`, [id])).rows[0] ?? null;
-}
-
-/** Publishes facts from a queued post that the admin has checked (and maybe corrected). */
-async function publishRawPost(itemId: number, rawPostId: number, fields: SubmissionFields, cityId: number | null): Promise<string> {
-  const pool = getPool();
-  const rp = await rawPost(rawPostId);
-  if (!rp) throw new Error("the post is no longer stored");
-  const city = cityId ?? rp.city_id;
-  if (!city) throw new Error("choose a city");
-  const out = await createCheckedEvent(pool, new AnthropicLlm(), city, fields, {
-    type: rp.source_kind === "instagram" ? "instagram" : "web", url: rp.post_url, rawPostId: rp.id, origin: "scraped",
-  }, { jobName: JOB });
-  await pool.query("UPDATE raw_posts SET processing_state = 'published', processed_at = now() WHERE id = $1", [rp.id]);
-  await resolveItem(itemId, "approved", `published as ${out.path}${out.published ? "" : " (description pending review)"}`);
+/**
+ * Publishes facts from a queued post that the admin has checked (and maybe corrected). Where a fact the
+ * second look found is among them, the page it came from is recorded as a source of the event.
+ */
+async function publishRawPost(itemId: number, rawPostId: number, fields: SubmissionFields, cityId: number | null, lookup: LookupResult | null): Promise<string> {
+  const out = await publishQueuedPost(getPool(), new AnthropicLlm(), { itemId, rawPostId, fields, cityId, lookup, jobName: JOB });
   return out.path;
 }
 
@@ -74,7 +64,9 @@ export async function approveItem(form: FormData): Promise<void> {
       case "raw_post": {
         const ev = (it.payload.event ?? null) as ExtractedEvent | null;
         if (!ev) back(`/admin/queue/${it.id}`, "Nothing was extracted from this post: fill in the facts and publish.");
-        msg = `Published: ${await publishRawPost(it.id, it.item_id!, fieldsFromExtraction(ev!, await categories(), 0), null)}`;
+        // What the second look found (if anything) is filled in: the reviewer saw it beside the button.
+        const lookup = lookupOf(it.payload);
+        msg = `Published: ${await publishRawPost(it.id, it.item_id!, fieldsFromExtraction(applyFound(ev!, lookup?.found ?? []), await categories(), 0), null, lookup)}`;
         break;
       }
       case "event": {
@@ -162,7 +154,7 @@ export async function saveItem(form: FormData): Promise<void> {
       }
     } else if (item!.item_type === "raw_post") {
       if (!publish) back(`/admin/queue/${id}`, "Posts are not stored as drafts: publish or reject.");
-      msg = `Published: ${await publishRawPost(id, item!.item_id!, fields, cityId)}`;
+      msg = `Published: ${await publishRawPost(id, item!.item_id!, fields, cityId, lookupOf(item!.payload))}`;
     } else if (item!.item_type === "poster") {
       // Facts typed in from a poster the reader could not use: a submission from the inbox, approved.
       const { id: subId } = await createDraft({ channel: "admin", cityId, fields, posterId: item!.item_id }, pool);
@@ -229,6 +221,35 @@ export async function updateHandle(form: FormData): Promise<void> {
 }
 
 // ---------------------------------------------------------------- events
+
+/** Correct a published event's facts (a wrong date, time, title, venue, price, link or category). The reason is required and kept. */
+export async function saveEventEdit(form: FormData): Promise<void> {
+  await requireAdmin();
+  const id = num(form, "id");
+  const here = `/admin/events/${id}`;
+  let msg = "Saved.";
+  let listed = "/admin/events";
+  try {
+    const out = await editEvent(getPool(), new AnthropicLlm(), id, {
+      fields: readFields(form),
+      description: String(form.get("description") ?? ""),
+      rewrite: form.get("rewrite") === "on",
+      reason: String(form.get("reason") ?? ""),
+    }, { jobName: JOB });
+    listed = `/admin/events?q=${encodeURIComponent(out.path.split("/").pop()!)}`;
+    msg = `Saved: ${out.changes.join("; ")}.`;
+    if (out.movedFrom) msg += ` The page is now at ${out.path}; the old address redirects to it.`;
+    if (out.description === "rewritten") msg += " The description was written again from the corrected facts.";
+    if (out.description === "not rewritten") {
+      msg += ` The description could NOT be written again (${out.descriptionError ?? "unknown error"}), so it still has the old wording: open the event again and correct the description by hand.`;
+    }
+  } catch (err) {
+    unstable_rethrow(err);
+    back(here, err instanceof EditError ? err.message : `Could not save: ${(err as Error).message}`);
+  }
+  refreshPublicPages();
+  back(listed, msg);
+}
 
 /** Cancel, take down or restore a public page. The reason is required and kept. */
 export async function eventAction(form: FormData): Promise<void> {

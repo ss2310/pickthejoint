@@ -28,6 +28,9 @@ import { runDiscovery } from "../../src/lib/pipeline/discovery";
 import { processPosts } from "../../src/lib/pipeline/process";
 import { ingestion, translation } from "../../src/config";
 import { translatePending } from "../../src/lib/pipeline/translate";
+import { secondLook } from "../../src/config";
+import { AnthropicResearch } from "../../src/lib/pipeline/research";
+import { runSecondLook } from "../../src/lib/pipeline/second-look";
 
 main("ingest", async (pool, report, args) => {
   const llm = new AnthropicLlm();
@@ -63,6 +66,16 @@ main("ingest", async (pool, report, args) => {
   }
   const pipeline = await processPosts(pool, { llm, apify }, { jobName, dryRun: args.dryRun, batch: args.batch, expectedNewPosts });
   report.pipeline = pipeline;
+
+  // Second look (off unless SECOND_LOOK=on): tries to settle the uncertain events waiting in the review queue.
+  if (secondLook.enabled) {
+    try {
+      report.secondLook = await runSecondLook(pool, { llm, research: new AnthropicResearch() }, { jobName, dryRun: args.dryRun, batch: args.batch, city: args.city });
+    } catch (err) {
+      // A second-look problem must not fail the job: the items simply stay in the queue for a person.
+      report.secondLook = { error: (err as Error).message.slice(0, 300) };
+    }
+  }
   if (args.dryRun) return;
 
   // New or changed text gets its Hindi now, so it is never translated on page load.

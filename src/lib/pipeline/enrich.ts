@@ -25,7 +25,7 @@ import { nameKey, wordCount } from "./text";
 
 export type EntityType = "venue" | "artist" | "organiser";
 export const ENTITY_TYPES: EntityType[] = ["venue", "artist", "organiser"];
-type Strength = "official" | "reputable" | "weak";
+export type Strength = "official" | "reputable" | "weak";
 
 const TABLE: Record<EntityType, "venues" | "artists" | "organisers"> = { venue: "venues", artist: "artists", organiser: "organisers" };
 
@@ -338,8 +338,8 @@ const PRIVATE = /\b(wife|husband|spouse|married|marriage|divorc\w*|girlfriend|bo
 
 export const isPrivate = (text: string) => PRIVATE.test(text);
 
-const suffixMatch = (host: string, domain: string) => host === domain || host.endsWith(`.${domain}`);
-const isWeakHost = (host: string) => enrichment.weakDomains.some((d) => suffixMatch(host, d));
+export const suffixMatch = (host: string, domain: string) => host === domain || host.endsWith(`.${domain}`);
+export const isWeakHost = (host: string) => enrichment.weakDomains.some((d) => suffixMatch(host, d));
 /**
  * The site behind a host, so that one site under two addresses is not counted
  * as two independent sources: tripadvisor.in and tripadvisor.com are both "tripadvisor".
@@ -364,6 +364,29 @@ export interface OwnSources {
   websites: string[];
 }
 
+/**
+ * Keeps only sources the research tools really returned (`titles` is keyed by `urlKey` of each returned
+ * page), once each, and lets the caller settle how strong each one is. Shared with the second look.
+ */
+export function checkSources(
+  sources: { url: string; kind: Strength }[], titles: Map<string, string | null>,
+  strengthOf: (key: string, host: string, kind: Strength) => Strength,
+): CheckedSource[] {
+  const seen = new Set<string>();
+  const kept: CheckedSource[] = [];
+  for (const src of sources) {
+    const key = urlKey(src.url);
+    if (!titles.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    kept.push({ url: src.url.trim(), title: titles.get(key) ?? null, strength: strengthOf(key, hostOf(src.url), src.kind) });
+  }
+  return kept;
+}
+
+/** Hard rule: one weak source is not enough; two weak sources on different sites are. */
+export const enoughSources = (sources: CheckedSource[]) =>
+  sources.some((x) => x.strength !== "weak") || new Set(sources.map((x) => siteOf(hostOf(x.url)))).size >= 2;
+
 export function assess(type: EntityType, s: Structured, pages: RetrievedPage[], own: OwnSources): Assessed {
   const out: Assessed = { facts: [], works: [], links: [], leftOut: [], doubtful: [], droppedPrivate: 0 };
   if (s.identity !== "confirmed") return out;
@@ -374,23 +397,9 @@ export function assess(type: EntityType, s: Structured, pages: RetrievedPage[], 
   for (const u of own.urls) if (!titles.has(urlKey(u))) titles.set(urlKey(u), "Official Instagram profile");
   const ownHosts = new Set(own.websites.map(hostOf).filter((h) => h && !isWeakHost(h) && !PLATFORM_HOSTS.some((p) => suffixMatch(h, p))));
 
-  /** Keeps only sources the tools really returned, and settles how strong each is. */
-  const check = (sources: { url: string; kind: Strength }[]): CheckedSource[] => {
-    const seen = new Set<string>();
-    const kept: CheckedSource[] = [];
-    for (const src of sources) {
-      const key = urlKey(src.url);
-      if (!titles.has(key) || seen.has(key)) continue;
-      seen.add(key);
-      const host = hostOf(src.url);
-      const strength: Strength = ownKeys.has(key) || ownHosts.has(host) ? "official" : isWeakHost(host) ? "weak" : src.kind;
-      kept.push({ url: src.url.trim(), title: titles.get(key) ?? null, strength });
-    }
-    return kept;
-  };
-  /** Hard rule: one weak source is not enough; two weak sources on different sites are. */
-  const enough = (sources: CheckedSource[]) =>
-    sources.some((x) => x.strength !== "weak") || new Set(sources.map((x) => siteOf(hostOf(x.url)))).size >= 2;
+  const check = (sources: { url: string; kind: Strength }[]): CheckedSource[] =>
+    checkSources(sources, titles, (key, host, kind) => (ownKeys.has(key) || ownHosts.has(host) ? "official" : isWeakHost(host) ? "weak" : kind));
+  const enough = enoughSources;
 
   const single = new Map<string, AcceptedFact>();
   const seenValues = new Set<string>();
