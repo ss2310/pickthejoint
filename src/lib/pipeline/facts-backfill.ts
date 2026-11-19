@@ -18,6 +18,9 @@ export interface BackfillReport {
   eventsWithNewFacts: number;
   factsStored: number;
   examples: { event: string; facts: string[] }[];
+  /** Calls that failed, and the first few reasons. */
+  failed: number;
+  errors: string[];
 }
 
 export async function backfillFacts(
@@ -30,7 +33,7 @@ export async function backfillFacts(
      WHERE e.is_published AND e.status = 'scheduled' AND e.starts_at > now()
        AND NOT EXISTS (SELECT 1 FROM practical_facts pf WHERE pf.entity_type = 'event' AND pf.entity_id = e.id)
      ORDER BY e.id, s.id LIMIT $1`, [opts.limit ?? 20]);
-  const report: BackfillReport = { posts: 0, estimatedUsd: 0, usd: 0, eventsWithNewFacts: 0, factsStored: 0, examples: [] };
+  const report: BackfillReport = { posts: 0, estimatedUsd: 0, usd: 0, eventsWithNewFacts: 0, factsStored: 0, examples: [], failed: 0, errors: [] };
   if (targets.length === 0) return report;
   const rows = (await pool.query<RawRow>(`${RAW_SELECT} WHERE rp.id = ANY($1::bigint[])`, [targets.map((t) => t.raw_post_id)])).rows;
   const lists = await cityLists(pool);
@@ -52,7 +55,11 @@ export async function backfillFacts(
     report.usd += r.usd;
     const [eventId, postId] = r.id.split(":").map(Number);
     if (r.usd > 0) await pool.query("UPDATE raw_posts SET model_usd = model_usd + $2 WHERE id = $1", [postId, r.usd]);
-    if (!r.ok || !r.data) continue;
+    if (!r.ok || !r.data) {
+      report.failed++;
+      if (r.error && report.errors.length < 5 && !report.errors.includes(r.error)) report.errors.push(r.error);
+      continue;
+    }
     const target = targets.find((t) => Number(t.event_id) === eventId)!;
     // A line-up post lists several events: the facts are taken from the one that is this event.
     const events = r.data.events.filter((e) => e.announcement === "new_event");
