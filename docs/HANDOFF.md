@@ -18,9 +18,9 @@ Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 
 | 6 Submissions and admin area | Live. Checks run on 18 Nov: see "Prompt 6 check results" below. Poster email built but waits on the owner's Resend setup |
 | 7 Natural-language search | Live. Checks run on 18 Nov: see "Prompt 7 check results" below |
 | 8 Citation tracker | Live. Baseline week recorded on 18 Nov: see "Prompt 8 check results" below |
+| Second look (owner's decisions of 19 Nov, not a numbered prompt) | Built, **switched off** until the owner has seen a production dry run and `SECOND_LOOK=on` is set on `ingest`. Never run for real, so its cost per lookup is an estimate. See "Second look" below |
 | 9 Wider sourcing | Live. Built on 18 Nov at the owner's request before the week of cost data ("start now anyway"). See "Prompt 9 check results" below |
 | Facebook page posts (owner's request of 19 Nov, not a numbered prompt) | Built, **switched off** until the owner has seen a production dry run and `FACEBOOK_POSTS=on` is set on `ingest`. See "Facebook page posts" below |
-| Second look (owner's decisions of 19 Nov, not a numbered prompt) | Built, **switched off** until the owner has seen a production dry run and `SECOND_LOOK=on` is set on `ingest`. Never run for real, so its cost per lookup is an estimate. See "Second look" below |
 | 10 to 15 | Not started. Text in `docs/build-prompts.md` |
 
 Production showed 13 Indore events before Prompt 6; one approved submission has been added since.
@@ -244,17 +244,6 @@ Each new source was run once on production (on the `enrich` service) as a dry ru
 - **Coverage page** (`/admin/coverage`) reports cost per published event by source. Model spend is recorded per item only from 18 Nov evening, so Instagram's model share before then shows as $0.
 - The `enrich` service is back on `npm run job:enrich` and `30 20 * * 0`.
 
-## Facebook page posts (19 Nov, built in the session after Prompt 9)
-
-The owner supplied 120 public Indore Facebook pages (found with Perplexity; now `data/facebook-pages-indore.csv`: 19 tier A, 70 tier B, 31 tier C; 19 are statewide or national pages whose posts are kept only when they name Indore). Only 5 of the 120 use Facebook's Events feature, which was all the Prompt 9 reader read, so the owner chose to have their ordinary posts read as well.
-
-- **How it works:** `src/lib/pipeline/facebook-posts.ts` reads the newest posts of pages that are due (A every two days, B weekly, C every two weeks; 3, 3 and 2 posts a check; only posts newer than the last check), through `apify/facebook-posts-scraper`, and stores them in `raw_posts` (`source_kind 'facebook'`, shortcode `fbp:<post id>`). The normal pipeline does the rest, including reading the flyer image. A page with 12 posts read and no event among them drops to the tier C pace by itself. Run it alone with `--sources facebook-posts`.
-- **Switched off by default.** It runs only where `FACEBOOK_POSTS=on` is set. The owner was promised a production dry run with its cost before any paid run.
-- **Cost:** `FACEBOOK_POSTS_BUDGET_USD` (default $10 a month, inside the scrape budget); reaching it stops this source only. Priced at $0.007 a post (Apify's list price with the date filter); the owner's plan may be cheaper, so compare the first real run with the Apify console and set `APIFY_USD_PER_FB_POST`. Worst case with all 120 pages at their caps is about 1,900 posts a month ($13 at list price, so the $10 limit would bite); model spend on those posts is roughly $0.005 a post unbatched, half that in the daily batch run.
-- **Not known until the first real run:** whether the actor reads pages given by number (16 of the 120, including the 5 `/p/Name-number/` addresses), whether it charges for error rows (the code counts every returned item as charged), and how many posts survive the free rules filter. The run report lists `pagesWithNothing` and the first few skip reasons.
-- **Also changed:** the Events-tab reader now takes 30 pages a run (pages that have shown an event first, the rest in turn) so its worst-case estimate stays under its $5 limit with 120 pages on record. `/admin/coverage` takes several page links at once, shows posts read, posts kept and posts that led to an event per page, and lets the tier be changed.
-- The page list is loaded by the release command on every deploy; it never changes a tier or an on/off switch set in the admin area.
-
 ## Second look (19 Nov, built over two sessions)
 
 On 19 Nov the review queue held 10 scraped posts waiting for a hand lookup, most of them for one missing fact (usually the venue). The second look tries to settle such an item before a person has to. The owner's decisions are under "Decisions the owner has made"; how it works is in `README.md` ("Second look") and at the top of `src/lib/pipeline/second-look.ts`.
@@ -268,6 +257,17 @@ On 19 Nov the review queue held 10 scraped posts waiting for a hand lookup, most
 - **Production dry run (free; needs the owner's yes because it changes a start command for a few minutes):** after the pull request is merged and `web` has deployed (that runs migration 014), follow "To run a one-off script on production" with `npm run job:second-look -- --dry-run` as the `enrich` service's start command, read the report in the deploy logs (`eligible`, `estimate.wouldMergeIntoListed`, `estimate.wouldLookUp`, `estimate.usd`), then put back `npm run job:enrich` and `30 20 * * 0`. The dry run needs no variable set. Expected on the queue as it stood on 19 Nov: 10 open posts, 6 already past, about 4 to try, roughly $0.40 if later run for real.
 - **To switch it on (owner's yes needed; this is the paid step):** set `SECOND_LOOK=on` on `ingest`. The next 06:00 IST run then works through the queue: at most 15 lookups a run and $8 a month. To run it once by itself instead, use the one-off method above with `npm run job:second-look` (no `--dry-run`) and `SECOND_LOOK=on` set on `enrich` for that run, then remove it.
 - **To switch it off:** delete `SECOND_LOOK` from the service. Results already written on review items stay there.
+
+## Facebook page posts (19 Nov, built in the session after Prompt 9)
+
+The owner supplied 120 public Indore Facebook pages (found with Perplexity; now `data/facebook-pages-indore.csv`: 19 tier A, 70 tier B, 31 tier C; 19 are statewide or national pages whose posts are kept only when they name Indore). Only 5 of the 120 use Facebook's Events feature, which was all the Prompt 9 reader read, so the owner chose to have their ordinary posts read as well.
+
+- **How it works:** `src/lib/pipeline/facebook-posts.ts` reads the newest posts of pages that are due (A every two days, B weekly, C every two weeks; 3, 3 and 2 posts a check; only posts newer than the last check), through `apify/facebook-posts-scraper`, and stores them in `raw_posts` (`source_kind 'facebook'`, shortcode `fbp:<post id>`). The normal pipeline does the rest, including reading the flyer image. A page with 12 posts read and no event among them drops to the tier C pace by itself. Run it alone with `--sources facebook-posts`.
+- **Switched off by default.** It runs only where `FACEBOOK_POSTS=on` is set. The owner was promised a production dry run with its cost before any paid run.
+- **Cost:** `FACEBOOK_POSTS_BUDGET_USD` (default $10 a month, inside the scrape budget); reaching it stops this source only. Priced at $0.007 a post (Apify's list price with the date filter); the owner's plan may be cheaper, so compare the first real run with the Apify console and set `APIFY_USD_PER_FB_POST`. Worst case with all 120 pages at their caps is about 1,900 posts a month ($13 at list price, so the $10 limit would bite); model spend on those posts is roughly $0.005 a post unbatched, half that in the daily batch run.
+- **Not known until the first real run:** whether the actor reads pages given by number (16 of the 120, including the 5 `/p/Name-number/` addresses), whether it charges for error rows (the code counts every returned item as charged), and how many posts survive the free rules filter. The run report lists `pagesWithNothing` and the first few skip reasons.
+- **Also changed:** the Events-tab reader now takes 30 pages a run (pages that have shown an event first, the rest in turn) so its worst-case estimate stays under its $5 limit with 120 pages on record. `/admin/coverage` takes several page links at once, shows posts read, posts kept and posts that led to an event per page, and lets the tier be changed.
+- The page list is loaded by the release command on every deploy; it never changes a tier or an on/off switch set in the admin area.
 
 ## Next: Prompt 10
 
