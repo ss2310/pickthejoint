@@ -32,7 +32,7 @@ import type { Pool, PoolClient } from "pg";
 import { budgets, citations, ingestion, secondLook as cfg } from "../../config";
 import { BudgetExceededError, monthSpend } from "../budget-guard";
 import { createCheckedEvent, fieldsFromExtraction, type SubmissionFields } from "../submissions";
-import { checkSources, enoughSources, isWeakHost, suffixMatch, type CheckedSource, type Strength } from "./enrich";
+import { checkSources, isWeakHost, siteOf, suffixMatch, type CheckedSource, type Strength } from "./enrich";
 import type { ExtractedEvent } from "./extract";
 import { estimateUsd, type LlmClient, type LlmRequest } from "./llm";
 import { hostOf, urlKey, type ResearchClient, type RetrievedPage } from "./research";
@@ -313,6 +313,15 @@ function strengthOf(host: string, kind: Strength): Strength {
 }
 
 /**
+ * AllEvents and the sites that copy its listings carry one listing between them, so together they are a
+ * single weak source: a second, unrelated site has to agree before such a fact counts.
+ */
+const ALLEVENTS_FAMILY: readonly string[] = ["allevents.in", ...cfg.weakDomains];
+const siteKey = (host: string) => (ALLEVENTS_FAMILY.some((d) => suffixMatch(host, d)) ? "allevents" : siteOf(host));
+const enough = (sources: CheckedSource[]) =>
+  sources.some((x) => x.strength !== "weak") || new Set(sources.map((x) => siteKey(hostOf(x.url)))).size >= 2;
+
+/**
  * Decides which looked-up facts count. A fact needs a source that the search really returned, on a page
  * that is about the same event and itself states the fact; one weak site is not enough; and the model must
  * be confident. Everything else is listed in `leftOut` with the reason, for the reviewer.
@@ -380,7 +389,7 @@ export function assessLookup(
       return !problem;
     });
     if (sources.length === 0) { leave(problems[0]); continue; }
-    if (!enoughSources(sources)) { leave("supported by a single weak source"); continue; }
+    if (!enough(sources)) { leave("supported by a single weak source"); continue; }
 
     if (need === "city" && !inCity(value, ctx.cityName, ctx.areas)) { leave(`appears to take place in ${value}, not ${ctx.cityName}`); continue; }
     if (need === "date") {

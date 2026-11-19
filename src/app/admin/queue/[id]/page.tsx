@@ -4,9 +4,10 @@ import { getPool } from "@/lib/db";
 import { queueItem } from "@/lib/admin-data";
 import { requireAdmin } from "@/lib/admin-session";
 import type { ExtractedEvent } from "@/lib/pipeline/extract";
+import { applyFound, lookupOf } from "@/lib/pipeline/second-look";
 import { emptyFields, fieldsFromExtraction, getSubmission, type SubmissionFields } from "@/lib/submissions";
 import { saveItem } from "../../actions";
-import { FieldInputs, Msg, Raw, Thumb } from "../../components";
+import { FieldInputs, Msg, Raw, SecondLook, Thumb } from "../../components";
 
 export const metadata = { title: "Edit review item" };
 
@@ -19,6 +20,7 @@ export default async function EditItem({ params, searchParams }: { params: Promi
   const cities = (await pool.query<{ id: number; slug: string; name: string }>("SELECT id, slug, name FROM cities ORDER BY is_live DESC, name")).rows;
   const categories = (await pool.query<{ slug: string; name: string }>("SELECT slug, name FROM categories ORDER BY sort_order")).rows;
   const p = item.payload as Record<string, unknown>;
+  const lookup = item.item_type === "raw_post" ? lookupOf(p) : null;
 
   let fields: SubmissionFields = emptyFields();
   let city: string | null = null;
@@ -28,7 +30,8 @@ export default async function EditItem({ params, searchParams }: { params: Promi
     const s = await getSubmission(item.item_id!);
     if (s) { fields = s.fields; city = cities.find((c) => c.id === s.city_id)?.slug ?? null; posterId = s.poster_id; }
   } else if (item.item_type === "raw_post") {
-    if (p.event) fields = fieldsFromExtraction(p.event as ExtractedEvent, categories.map((c) => c.slug), 0);
+    // The form starts from the post's facts with what the second look found filled in; the reviewer can change any of it.
+    if (p.event) fields = fieldsFromExtraction(applyFound(p.event as ExtractedEvent, lookup?.found ?? []), categories.map((c) => c.slug), 0);
     const rp = (await pool.query<{ city: string | null }>(
       "SELECT c.slug AS city FROM raw_posts rp LEFT JOIN handles h ON h.handle = rp.handle LEFT JOIN cities c ON c.id = coalesce(rp.city_id, h.city_id) WHERE rp.id = $1", [item.item_id])).rows[0];
     city = rp?.city ?? null;
@@ -76,6 +79,7 @@ export default async function EditItem({ params, searchParams }: { params: Promi
         <section>
           {posterId && <Thumb posterId={posterId} alt="Poster photo" />}
           {item.item_type === "raw_post" && typeof p.url === "string" && <p><a href={p.url} rel="noopener nofollow" target="_blank">Open the source post</a></p>}
+          <SecondLook lookup={lookup} />
           <Raw label="Stored details" value={p} />
         </section>
       </div>
