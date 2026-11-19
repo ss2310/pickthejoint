@@ -96,7 +96,7 @@ class FakeLlm implements LlmClient {
           events: [{
             announcement: "new_event", title: f("The Yellow Diary: Winter Tour"), start_date: f(inDays(40)), start_time: f("20:00"), end_date: f<string>(null), end_time: f<string>(null),
             venue_name: f("Phoenix Citadel"), venue_instagram_handle: null, city: f("Indore"), area: f<string>(null), price_text: f("₹999"), is_free: f(false),
-            booking_url: f<string>(null), performers: [], organiser: f<string>(null), organiser_instagram_handle: null, category: f("music"), practical: [],
+            booking_url: f<string>(null), performers: [], organiser: f<string>(null), organiser_instagram_handle: null, category: f("music"), practical: "",
           }],
         };
         data = ex;
