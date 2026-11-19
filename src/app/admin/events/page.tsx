@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { findEvents } from "@/lib/admin-data";
 import { requireAdmin } from "@/lib/admin-session";
 import { eventAction } from "../actions";
@@ -13,7 +14,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
     <>
       <h1>Events</h1>
       <Msg msg={msg} />
-      <p className="muted small">Mark an event cancelled (the page stays up with a notice), take a page down after a takedown request (it stops being served), or restore it. Every change keeps the reason.</p>
+      <p className="muted small">Correct an event&apos;s facts with &ldquo;Edit the facts&rdquo; (a wrong date, time, title, venue, price or link). Or mark an event cancelled (the page stays up with a notice), take a page down after a takedown request (it stops being served), or restore it. Every change keeps the reason.</p>
       <form method="get" className="filters">
         <label>Find by title or slug <input type="search" name="q" defaultValue={q} /></label>
         <button className="button">Search</button>
@@ -26,7 +27,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
             <tr key={e.id} className={!e.is_published || e.status === "cancelled" ? "warn" : undefined}>
               <td>
                 <a href={`/${e.city}/events/${e.slug}`} target="_blank">{e.title}</a>
-                <span className="block muted small">{e.origin}</span>
+                <span className="block muted small">{e.origin} · <Link href={`/admin/events/${e.id}`}>Edit the facts</Link></span>
                 {e.actions.slice(0, 3).map((a, i) => <span key={i} className="block small">{a.action} {ist(a.created_at)}: {a.reason}</span>)}
               </td>
               <td>{e.local_date}</td>

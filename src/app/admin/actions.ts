@@ -10,6 +10,7 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { getPool } from "@/lib/db";
 import { queueItem } from "@/lib/admin-data";
 import { requireAdmin } from "@/lib/admin-session";
+import { EditError, editEvent } from "@/lib/event-edit";
 import type { ExtractedEvent } from "@/lib/pipeline/extract";
 import { AnthropicLlm } from "@/lib/pipeline/llm";
 import { applyFound, lookupOf, publishQueuedPost, type LookupResult } from "@/lib/pipeline/second-look";
@@ -220,6 +221,35 @@ export async function updateHandle(form: FormData): Promise<void> {
 }
 
 // ---------------------------------------------------------------- events
+
+/** Correct a published event's facts (a wrong date, time, title, venue, price, link or category). The reason is required and kept. */
+export async function saveEventEdit(form: FormData): Promise<void> {
+  await requireAdmin();
+  const id = num(form, "id");
+  const here = `/admin/events/${id}`;
+  let msg = "Saved.";
+  let listed = "/admin/events";
+  try {
+    const out = await editEvent(getPool(), new AnthropicLlm(), id, {
+      fields: readFields(form),
+      description: String(form.get("description") ?? ""),
+      rewrite: form.get("rewrite") === "on",
+      reason: String(form.get("reason") ?? ""),
+    }, { jobName: JOB });
+    listed = `/admin/events?q=${encodeURIComponent(out.path.split("/").pop()!)}`;
+    msg = `Saved: ${out.changes.join("; ")}.`;
+    if (out.movedFrom) msg += ` The page is now at ${out.path}; the old address redirects to it.`;
+    if (out.description === "rewritten") msg += " The description was written again from the corrected facts.";
+    if (out.description === "not rewritten") {
+      msg += ` The description could NOT be written again (${out.descriptionError ?? "unknown error"}), so it still has the old wording: open the event again and correct the description by hand.`;
+    }
+  } catch (err) {
+    unstable_rethrow(err);
+    back(here, err instanceof EditError ? err.message : `Could not save: ${(err as Error).message}`);
+  }
+  refreshPublicPages();
+  back(listed, msg);
+}
 
 /** Cancel, take down or restore a public page. The reason is required and kept. */
 export async function eventAction(form: FormData): Promise<void> {

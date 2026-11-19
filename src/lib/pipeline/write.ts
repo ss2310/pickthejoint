@@ -84,6 +84,15 @@ export function descriptionEstimate(id: string): LlmRequest<Description> {
   };
 }
 
+/** The facts a description is written from, for the events a WHERE clause picks. */
+const EVENT_FACTS = `SELECT e.id, e.title, e.starts_at, e.ends_at, e.start_time_known, e.price_text, e.is_free,
+            e.booking_url IS NOT NULL AS has_booking, v.name AS venue, a.name AS area, c.name AS city, c.timezone,
+            cat.name AS category,
+            (SELECT array_agg(ar.name ORDER BY ea.billing_order) FROM event_artists ea JOIN artists ar ON ar.id = ea.artist_id WHERE ea.event_id = e.id) AS performers,
+            (SELECT array_agg(o.name) FROM event_organisers eo JOIN organisers o ON o.id = eo.organiser_id WHERE eo.event_id = e.id) AS organisers
+     FROM events e JOIN cities c ON c.id = e.city_id
+     LEFT JOIN venues v ON v.id = e.venue_id LEFT JOIN areas a ON a.id = v.area_id LEFT JOIN categories cat ON cat.id = e.category_id`;
+
 export interface WriteReport { written: number; failed: number; modelUsd: number }
 
 /**
@@ -95,13 +104,7 @@ export async function writeDescriptions(
 ): Promise<WriteReport> {
   const which = opts.eventIds ? "e.id = ANY($1::bigint[])" : "e.origin = 'scraped' AND e.confidence >= $1";
   const { rows } = await pool.query<PendingEvent>(
-    `SELECT e.id, e.title, e.starts_at, e.ends_at, e.start_time_known, e.price_text, e.is_free,
-            e.booking_url IS NOT NULL AS has_booking, v.name AS venue, a.name AS area, c.name AS city, c.timezone,
-            cat.name AS category,
-            (SELECT array_agg(ar.name ORDER BY ea.billing_order) FROM event_artists ea JOIN artists ar ON ar.id = ea.artist_id WHERE ea.event_id = e.id) AS performers,
-            (SELECT array_agg(o.name) FROM event_organisers eo JOIN organisers o ON o.id = eo.organiser_id WHERE eo.event_id = e.id) AS organisers
-     FROM events e JOIN cities c ON c.id = e.city_id
-     LEFT JOIN venues v ON v.id = e.venue_id LEFT JOIN areas a ON a.id = v.area_id LEFT JOIN categories cat ON cat.id = e.category_id
+    `${EVENT_FACTS}
      WHERE ${which} AND NOT e.is_published AND e.description IS NULL AND e.status = 'scheduled'
      ORDER BY e.id`,
     [opts.eventIds ?? ingestion.publishConfidence],
@@ -136,4 +139,25 @@ export async function writeDescriptions(
     report.written++;
   }
   return report;
+}
+
+/**
+ * Writes the text again for one event whose facts were corrected after it was published.
+ * Nothing about the event is changed here: the caller stores the text. When no usable text
+ * comes back, `text` is null and `error` says why, and the old text stays where it is.
+ */
+export async function rewriteDescription(
+  pool: Pool, llm: LlmClient, eventId: number, opts: { jobName: string; subBudget?: SubBudget },
+): Promise<{ text: string | null; usd: number; error?: string }> {
+  const { rows } = await pool.query<PendingEvent>(`${EVENT_FACTS}
+     WHERE e.id = $1`, [eventId]);
+  if (rows.length === 0) return { text: null, usd: 0, error: "the event was not found" };
+  const [r] = await llm.run([request(rows[0])], { jobName: opts.jobName, subBudget: opts.subBudget });
+  if (!r) return { text: null, usd: 0, error: "the model gave no answer" };
+  const text = r.data ? dropMissingFactSentences(r.data.description.trim().replace(/\s+/g, " ")) : "";
+  const words = text ? wordCount(text) : 0;
+  if (!r.ok || !text || words < 35 || words > ingestion.description.maxWords + 30) {
+    return { text: null, usd: r.usd, error: r.error ?? `the new description was ${words} words` };
+  }
+  return { text, usd: r.usd };
 }

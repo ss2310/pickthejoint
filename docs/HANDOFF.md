@@ -258,6 +258,17 @@ On 19 Nov the review queue held 10 scraped posts waiting for a hand lookup, most
 - **To switch it on (owner's yes needed; this is the paid step):** set `SECOND_LOOK=on` on `ingest`. The next 06:00 IST run then works through the queue: at most 15 lookups a run and $8 a month. To run it once by itself instead, use the one-off method above with `npm run job:second-look` (no `--dry-run`) and `SECOND_LOOK=on` set on `enrich` for that run, then remove it.
 - **To switch it off:** delete `SECOND_LOOK` from the service. Results already written on review items stay there.
 
+## Correcting a published event (19 Nov, owner's request)
+
+The owner published "Shreya Ghoshal Live – The Unstoppable Tour" with the wrong date and found the admin area could only cancel, take down or restore an event. `/admin/events` now has "Edit the facts" on every event (find a past-dated one with the search box; the list shows upcoming events only).
+
+- **What can be corrected:** title, date, start and end time, last day, venue, category, price, free entry, booking link, and the description. Performers, organisers and sources cannot be edited there yet.
+- **The reason is required** and is kept with what changed (`event_actions`, action `edited`); the edit page lists earlier changes.
+- **Description:** written again from the corrected facts by default (one mid-tier model call, about half a cent, logged like any other). Text the admin types is used as it is, with no model call. If the rewrite fails, the facts are still saved and the message says the description still has the old wording.
+- **Address:** a corrected title or date changes the page's address; the old address redirects permanently (`event_redirects`, migration 015), including its "add to calendar" link. The old share-image address is not redirected.
+- **Hindi:** the Hindi page shows the corrected date at once (dates come from the data); a rewritten description appears in English there until the next `ingest` run translates it.
+- **Checked** with `tests/event-edit.test.ts` and by hand in a local copy of the site; not yet used on production.
+
 ## Facebook page posts (19 Nov, built in the session after Prompt 9)
 
 The owner supplied 120 public Indore Facebook pages (found with Perplexity; now `data/facebook-pages-indore.csv`: 19 tier A, 70 tier B, 31 tier C; 19 are statewide or national pages whose posts are kept only when they name Indore). Only 5 of the 120 use Facebook's Events feature, which was all the Prompt 9 reader read, so the owner chose to have their ordinary posts read as well.
