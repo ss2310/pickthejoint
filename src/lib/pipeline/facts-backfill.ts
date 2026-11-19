@@ -6,7 +6,7 @@
  */
 import type { Pool } from "pg";
 import { storeFacts } from "../practical";
-import { fetchImages, extractionRequest } from "./extract";
+import { fetchImages, extractionRequest, practicalOf } from "./extract";
 import { estimateUsd, type LlmClient } from "./llm";
 import { RAW_SELECT, cityLists, toInput, type RawRow } from "./process";
 import { titleSimilarity } from "./text";
@@ -67,11 +67,12 @@ export async function backfillFacts(
       : events.map((e) => ({ e, s: titleSimilarity(e.title.value ?? "", target.title) })).sort((a, b) => b.s - a.s).find((x) => x.s >= 0.5)?.e;
     if (!match) continue;
     const row = byPost.get(postId)!;
-    const stored = await storeFacts(pool, eventId, match.practical, { type: "post", url: row.post_url, rawPostId: postId });
+    const stated = practicalOf(match);
+    const stored = await storeFacts(pool, eventId, stated, { type: "post", url: row.post_url, rawPostId: postId });
     if (stored.stored) {
       report.eventsWithNewFacts++;
       report.factsStored += stored.stored;
-      if (report.examples.length < 10) report.examples.push({ event: target.title, facts: (match.practical ?? []).map((p) => `${p.key}: ${p.answer}`) });
+      if (report.examples.length < 10) report.examples.push({ event: target.title, facts: stated.map((p) => `${p.key}: ${p.answer}`) });
     }
   }
   report.usd = Number(report.usd.toFixed(4));

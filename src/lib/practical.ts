@@ -94,6 +94,16 @@ export async function storeFacts(db: Db, eventId: number, facts: StatedFact[] | 
   return report;
 }
 
+/** The model's "key | confidence | answer" lines as facts; a line in any other shape is ignored. */
+export function parsePractical(text: string | null | undefined): StatedFact[] {
+  const out: StatedFact[] = [];
+  for (const line of (text ?? "").split(/\r?\n/)) {
+    const m = line.replace(/^\s*[-*•]\s*/, "").match(/^\s*([a-z_]+)\s*\|\s*([01](?:\.\d+)?)\s*\|\s*(.+?)\s*$/);
+    if (m && isFactKey(m[1])) out.push({ key: m[1], confidence: Number(m[2]), answer: m[3] });
+  }
+  return out;
+}
+
 /** Facts from a form, keyed by question, as a list the store understands. Form facts are stated by a person: full confidence. */
 export function formFacts(practical: Partial<Record<string, string>> | null | undefined): StatedFact[] {
   return Object.entries(practical ?? {}).filter(([k, v]) => isFactKey(k) && v && v.trim()).map(([key, answer]) => ({ key, answer: answer!, confidence: 1 }));

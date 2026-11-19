@@ -16,7 +16,7 @@ import { z } from "zod";
 import type { Pool } from "pg";
 import { ingestion, submissions as cfg, type SubBudget } from "../config";
 import { getPool } from "./db";
-import type { ExtractedEvent } from "./pipeline/extract";
+import { practicalOf, type ExtractedEvent } from "./pipeline/extract";
 import type { LlmClient, LlmRequest } from "./pipeline/llm";
 import { attachPeople, categoryId, matchVenue, timing, uniqueSlug, type PostContext } from "./pipeline/resolve";
 import { daysBetween, isClockTime, isIsoDate, localDate, slugify, titleSimilarity } from "./pipeline/text";
@@ -177,7 +177,7 @@ export function fieldsFromExtraction(ev: ExtractedEvent, categories: string[], m
   if (f.end_time && !isClockTime(f.end_time)) f.end_time = "";
   // Practical details the source stated, for the reviewer to check like the rest (older readings have none).
   const practical: Partial<Record<FactKey, string>> = {};
-  for (const p of ev.practical ?? []) {
+  for (const p of practicalOf(ev)) {
     if (!isFactKey(p.key) || practical[p.key] || p.confidence < Math.max(minConfidence, 0.6)) continue;
     const answer = cleanAnswer(p.key, p.answer);
     if (answer) practical[p.key] = answer;

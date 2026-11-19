@@ -7,7 +7,7 @@ import { z } from "zod";
 import type Anthropic from "@anthropic-ai/sdk";
 import { ingestion } from "../../config";
 import type { LlmRequest } from "./llm";
-import { FACT_KEYS } from "../practical";
+import { parsePractical, type StatedFact } from "../practical";
 import { localDate, localWeekday } from "./text";
 
 const field = <T extends z.ZodType>(value: T) => z.object({ value: value.nullable(), confidence: z.number() });
@@ -31,8 +31,9 @@ export function extractionSchema(categorySlugs: string[]) {
     organiser: field(z.string()),
     organiser_instagram_handle: z.string().nullable(),
     category: field(z.enum(categorySlugs as [string, ...string[]])),
-    // Practical answers the source states (Prompt 11); usually few or none.
-    practical: z.array(z.object({ key: z.enum(FACT_KEYS), answer: z.string(), confidence: z.number() })),
+    // Practical answers the source states (Prompt 11), as "key | confidence | answer" lines; usually empty.
+    // Plain text, not a nested list: a nested list made the schema too large for structured outputs.
+    practical: z.string(),
   });
   return z.object({
     is_event_post: z.boolean(),
@@ -44,8 +45,15 @@ export function extractionSchema(categorySlugs: string[]) {
 
 type ModelExtraction = z.infer<ReturnType<typeof extractionSchema>>;
 type ModelEvent = ModelExtraction["events"][number];
-/** Readings stored before Prompt 11 have no practical facts, so they are optional everywhere but in the model's answer. */
-export type ExtractedEvent = Omit<ModelEvent, "practical"> & { practical?: ModelEvent["practical"] };
+/**
+ * The model gives practical facts as text lines; facts typed in a form are a list. Readings stored before
+ * Prompt 11 have none. `practicalOf` reads any of these.
+ */
+export type ExtractedEvent = Omit<ModelEvent, "practical"> & { practical?: string | StatedFact[] };
+
+export function practicalOf(e: Pick<ExtractedEvent, "practical">): StatedFact[] {
+  return typeof e.practical === "string" ? parsePractical(e.practical) : e.practical ?? [];
+}
 export type Extraction = Omit<ModelExtraction, "events"> & { events: ExtractedEvent[] };
 
 export interface ExtractionInput {
@@ -91,7 +99,7 @@ Fields
 - performers: named artists, bands, comedians, DJs or speakers. Not the venue, not sponsors.
 - organiser and organiser_instagram_handle: who is putting it on, if stated and different from the venue.
 - category: the best fit from the allowed list.
-- practical: practical facts the source states about attending, one entry per fact, in English. Leave out anything not stated; most posts state none or one or two. Keys:
+- practical: practical facts the source states about attending, in English, one per line written as "key | confidence | answer", for example "age_limit | 0.95 | 18+ only, ID checked at the gate". An empty string when none is stated, which is usual; most posts state none or one or two. Keys:
   doors_time (HH:MM when doors or gates open, only if given separately from the start time); age_limit ("18+ only", "children under 5 enter free"); entry_rules (ID needed, entry closes at a time, couples only, passes or registration needed); seating ("seated", "standing", "floor seating", "both"); indoor_outdoor ("indoors", "outdoors", "both"); language (the language of the performance or talk); food_drink (food or drinks on sale or not, outside food allowed or not); dress_code; refund_policy (refund or cancellation terms for tickets); accessibility (wheelchair access, ramps, lifts); parking (parking at or near the venue); how_to_reach (directions as written).
   Write each answer as a short phrase or sentence in your own words, at most 25 words, saying only what the source says. Confidence as for the other fields.
 - co_host_handles: Instagram handles (without @) credited in the post as co-hosts, organisers, partners or performers.
