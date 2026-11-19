@@ -39,6 +39,19 @@ Scheduled jobs run as separate Railway cron services from the same repo, with th
 - housekeeping, daily: start command `npm run job:housekeeping`
 - enrich, weekly: start command `npm run job:enrich`
 
+## Practical facts and weekly guides (Prompt 11)
+
+**Practical facts** (`src/lib/practical.ts`): the answers people look for before going (doors, age limit, entry rules, seating, indoors or outdoors, language, food and drink, dress code, refund terms) and, stored on the venue and shown on every event there, wheelchair access, parking and how to reach it.
+- **Where they come from:** the extraction now asks for any practical fact the post or poster states (`practical` in `src/lib/pipeline/extract.ts`; usually none), stored only at confidence 0.8 or more, with the post as the source. A later post fills a gap but never replaces an answer. Organisers add or correct them through `/submit?event=<id>` (linked from the event page); after review in the queue those answers replace a post's. The admin can change or remove any of them at `/admin/events/<id>` ("checked by Pick the Joint"). A venue's parking and directions found by enrichment are used when nobody else has answered, with their page as the source.
+- **On the page:** "Before you go" on the event page: start, doors and end times plus every answered question, each with its source, as a question-and-answer list with `FAQPage` structured data. An unknown fact is simply not shown. Answers are translated into Hindi with the rest of the page text.
+- **Events listed before Prompt 11:** `npm run job:facts-backfill -- --dry-run [--limit 20]` shows how many source posts would be read again and the cost (one mid-tier call with the poster, about $0.01 to $0.02 a post); without `--dry-run` it stores only the practical facts it finds. Paid: owner's yes first.
+- Migration `016_practical_facts_roundups.sql`: tables `practical_facts` and `roundups`.
+
+**Weekly guide per city** (`src/lib/roundups.ts`): on Thursdays (IST) the `ingest` job drafts a guide for the Friday to the Thursday after. The sections (each category, then "Free this weekend" and "For families" when each has 3 or more events) are chosen from the listings without a model; one mid-tier call writes the headline and an overview of 70 to 140 words in English and Hindi from the events' facts (about a cent per city, `ROUNDUPS_BUDGET_USD`, default $2 a month). The event lines are drawn from the database whenever the page is shown, so a cancellation reaches old guides too.
+- **Nothing publishes by itself:** drafts wait at `/admin/roundups`, with a preview in both languages, editable wording and a one-click Publish. "Draft now" there makes this week's draft at once.
+- **Pages:** `/{city}/guide/{year}-week-{n}` (ISO week of the Friday) and `/{city}/guide`, in English and under `/hi/`, with `Article` structured data, in the sitemap and IndexNow; the city home and the weekend and week pages link to the newest one. Published guides stay live and keep linking to their events' pages.
+- `ROUNDUPS=off` on `ingest` stops the drafting. `--roundup` (with `--force` to draft again) on an ingest run drafts on any day; the admin page's "Draft now" is the simpler way.
+
 ## Wider sourcing (Prompt 9)
 What each source is, its cost, and its terms and robots.txt findings: `docs/sources.md`. Per-city source lists (census area, hashtags, web calendars): `data/sourcing.json`. Festival series: `data/series.json`.
 - **Venue census** (`src/lib/pipeline/census.ts`, table `venue_census`, admin only): OpenStreetMap places, every listed venue, Instagram location tags from discovery, and places added by hand. A census row is linked to a venue with the same name; a place gets a public page only once it has a published event. `/admin/venues` lists places with no Instagram handle on record and places with no event in 60 days, and starts tracking a handle in one click.

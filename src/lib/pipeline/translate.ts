@@ -31,6 +31,7 @@ const FIELD_LABEL: Record<string, string> = {
   "artist:bio": "profile of a performer", "organiser:name": "name of an event organiser", "organiser:bio": "profile of an organiser",
   "series:name": "name of a festival or recurring event", "series:description": "description of a recurring event", "series:recurrence": "when it recurs",
   "artist_post:update_text": "one-line note about a performer's new release", "artist_video:blurb": "one-sentence note about a video",
+  "practical_fact:answer": "short answer to a practical question about going to an event (age limit, entry, seating, parking, directions)",
   "area:name": "name of a neighbourhood", "city:name": "name of a city", "city:state": "name of an Indian state",
 };
 
@@ -60,6 +61,12 @@ WITH src AS (
   UNION ALL
   SELECT 'series', s.id, f.field, f.text, 5
     FROM series s, LATERAL (VALUES ('name', s.name), ('description', s.description), ('recurrence', s.recurrence)) f(field, text)
+  UNION ALL
+  -- Practical answers shown on a published event page (Prompt 11); a door time is a clock time, not text.
+  SELECT 'practical_fact', pf.id, 'answer', pf.answer, 9 FROM practical_facts pf
+    WHERE pf.fact_key <> 'doors_time' AND (
+      (pf.entity_type = 'event' AND EXISTS (SELECT 1 FROM events e JOIN cities c ON c.id = e.city_id WHERE e.id = pf.entity_id AND e.is_published AND c.is_live))
+      OR (pf.entity_type = 'venue' AND EXISTS (SELECT 1 FROM events e JOIN cities c ON c.id = e.city_id WHERE e.venue_id = pf.entity_id AND e.is_published AND c.is_live)))
   UNION ALL
   SELECT 'area', a.id, 'name', a.name, 6 FROM areas a JOIN cities c ON c.id = a.city_id WHERE c.is_live
   UNION ALL

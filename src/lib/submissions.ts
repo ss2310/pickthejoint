@@ -21,6 +21,7 @@ import type { LlmClient, LlmRequest } from "./pipeline/llm";
 import { attachPeople, categoryId, matchVenue, timing, uniqueSlug, type PostContext } from "./pipeline/resolve";
 import { daysBetween, isClockTime, isIsoDate, localDate, slugify, titleSimilarity } from "./pipeline/text";
 import { writeDescriptions } from "./pipeline/write";
+import { FACT_KEYS, cleanAnswer, formFacts, isFactKey, storeFacts, type FactKey } from "./practical";
 
 // ---------------------------------------------------------------- fields
 
@@ -44,6 +45,10 @@ export interface SubmissionFields {
   note: string;
   /** Fields a poster reading was unsure of, for the submitter to check. */
   uncertain?: string[];
+  /** Practical details (Prompt 11), keyed by question; empty ones are left out. */
+  practical?: Partial<Record<FactKey, string>>;
+  /** Set when the form adds or corrects practical details of an event already listed: that event's id. */
+  for_event?: number | null;
 }
 
 export interface Submitter { name: string; contact: string }
@@ -61,7 +66,7 @@ export function emptyFields(): SubmissionFields {
 }
 
 const LIMITS: Partial<Record<keyof SubmissionFields | keyof Submitter, number>> = {
-  title: 160, venue: 160, venue_address: 300, area: 80, category: 60, price: 120, booking_url: 500, instagram_url: 300,
+  title: 160, venue: 160, practical: 240, venue_address: 300, area: 80, category: 60, price: 120, booking_url: 500, instagram_url: 300,
   performers: 400, organiser: 160, note: 1500, name: 120, contact: 200,
 };
 
@@ -76,6 +81,14 @@ export function readFields(form: FormLike): SubmissionFields {
   for (const name of FIELD_NAMES) (f as unknown as Record<string, string>)[name] = text(form, name);
   f.note = (typeof form.get("note") === "string" ? (form.get("note") as string) : "").trim().slice(0, LIMITS.note!);
   f.is_free = form.get("is_free") === "on" || form.get("is_free") === "true";
+  const practical: Partial<Record<FactKey, string>> = {};
+  for (const key of FACT_KEYS) {
+    const v = form.get(`fact_${key}`);
+    if (typeof v === "string" && v.trim()) practical[key] = v.replace(/\s+/g, " ").trim().slice(0, LIMITS.practical!);
+  }
+  if (Object.keys(practical).length) f.practical = practical;
+  const forEvent = Number(form.get("for_event"));
+  if (Number.isInteger(forEvent) && forEvent > 0) f.for_event = forEvent;
   return f;
 }
 
@@ -85,7 +98,7 @@ export function readSubmitter(form: FormLike): Submitter {
 
 /** Error codes per field; the page turns each into a sentence in the reader's language. */
 export type FieldError =
-  | "required" | "badDate" | "pastDate" | "farDate" | "badTime" | "endBeforeStart" | "badUrl" | "badInstagram" | "badCategory" | "badContact"
+  | "required" | "noFacts" | "badDate" | "pastDate" | "farDate" | "badTime" | "endBeforeStart" | "badUrl" | "badInstagram" | "badCategory" | "badContact"
   /** Whole-form problems, stored under the key "_form". */
   | "captcha" | "tooMany";
 
@@ -105,6 +118,17 @@ const looksLikeContact = (c: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c) || 
 
 export function validate(f: SubmissionFields, s: Submitter | null, categories: string[], today: string): Partial<Record<string, FieldError>> {
   const e: Partial<Record<string, FieldError>> = {};
+  if (f.practical?.doors_time && !cleanAnswer("doors_time", f.practical.doors_time)) e.fact_doors_time = "badTime";
+  if (f.for_event) {
+    // Practical details for an event already listed: its facts are not asked again, but at least one detail is.
+    if (!formFacts(f.practical).length) e._facts = "noFacts";
+    if (s) {
+      if (!s.name) e.name = "required";
+      if (!s.contact) e.contact = "required";
+      else if (!looksLikeContact(s.contact)) e.contact = "badContact";
+    }
+    return e;
+  }
   for (const k of ["title", "date", "venue", "category"] as const) if (!f[k]) e[k] = "required";
   if (f.date) {
     if (!isIsoDate(f.date)) e.date = "badDate";
@@ -151,6 +175,14 @@ export function fieldsFromExtraction(ev: ExtractedEvent, categories: string[], m
   f.organiser = take(ev.organiser, "organiser") ?? "";
   if (f.start_time && !isClockTime(f.start_time)) f.start_time = "";
   if (f.end_time && !isClockTime(f.end_time)) f.end_time = "";
+  // Practical details the source stated, for the reviewer to check like the rest (older readings have none).
+  const practical: Partial<Record<FactKey, string>> = {};
+  for (const p of ev.practical ?? []) {
+    if (!isFactKey(p.key) || practical[p.key] || p.confidence < Math.max(minConfidence, 0.6)) continue;
+    const answer = cleanAnswer(p.key, p.answer);
+    if (answer) practical[p.key] = answer;
+  }
+  if (Object.keys(practical).length) f.practical = practical;
   f.uncertain = uncertain;
   return f;
 }
@@ -281,6 +313,20 @@ export async function screen(
   const out: Screening = { verdict: "looks_fine", notes: [], missing: [], duplicateOf: null, model: null, modelUsd: 0 };
   const isPublic = sub.channel === "form" || sub.channel === "poster";
 
+  if (f.for_event) {
+    // Practical details for an event already listed: the event's facts were checked when it was published.
+    const ev = (await pool.query<{ title: string; path: string }>(
+      "SELECT e.title, '/' || c.slug || '/events/' || e.slug AS path FROM events e JOIN cities c ON c.id = e.city_id WHERE e.id = $1 AND e.is_published",
+      [f.for_event])).rows[0];
+    out.notes.push(ev ? `practical details for "${ev.title}" (${ev.path})` : `the event (id ${f.for_event}) is not published`);
+    const n = formFacts(f.practical).length;
+    out.notes.push(n ? `${n} detail${n === 1 ? "" : "s"} sent` : "no details sent");
+    if (isPublic && !sub.submitter.contact) out.missing.push("contact");
+    const signs = spamSigns({ ...f, note: [f.note, ...Object.values(f.practical ?? {})].join(" ") }, isPublic ? sub.submitter : null);
+    if (signs.length) out.notes.push(`spam signs: ${signs.join("; ")}`);
+    out.verdict = signs.length >= 2 ? "likely_spam" : !ev || !n || signs.length || out.missing.length ? "needs_checking" : "looks_fine";
+    return out;
+  }
   for (const k of ["title", "date", "venue", "category"] as const) if (!f[k]) out.missing.push(k);
   if (isPublic && !sub.submitter.contact) out.missing.push("contact");
   if (out.missing.length) out.notes.push(`incomplete: ${out.missing.join(", ")} missing`);
@@ -342,7 +388,10 @@ export async function queueSubmission(
     "UPDATE submissions SET status = 'pending', screening = $2, form_errors = NULL, submitted_at = now(), updated_at = now() WHERE id = $1", [id, s]);
   await pool.query(
     "INSERT INTO review_queue (item_type, item_id, reason, payload) VALUES ('submission', $1, $2, $3)",
-    [id, `New event via ${CHANNEL_TEXT[sub.channel]}: ${VERDICT_TEXT[s.verdict]}`, { title: sub.fields.title, date: sub.fields.date, screening: s.notes }]);
+    [id, sub.fields.for_event
+      ? `Practical details for "${sub.fields.title}" via ${CHANNEL_TEXT[sub.channel]}: ${VERDICT_TEXT[s.verdict]}`
+      : `New event via ${CHANNEL_TEXT[sub.channel]}: ${VERDICT_TEXT[s.verdict]}`,
+    { title: sub.fields.title, date: sub.fields.date, screening: s.notes, ...(sub.fields.for_event ? { practical: sub.fields.practical ?? {} } : {}) }]);
   if (sub.poster_id) await keepPosterUntilEvent(pool, sub.poster_id, sub.fields.end_date || sub.fields.date);
   return s;
 }
@@ -387,6 +436,7 @@ export function asExtracted(f: SubmissionFields, cityName: string): ExtractedEve
     is_free: sure(f.is_free ? true : null), booking_url: sure(f.booking_url || null),
     performers: f.performers.split(/,|\n/).map((n) => n.trim()).filter(Boolean).slice(0, 12).map((name) => ({ name, kind: "person" as const, confidence: 1 })),
     organiser: sure(f.organiser || null), organiser_instagram_handle: null, category: sure(f.category || null),
+    practical: formFacts(f.practical).map((p) => ({ ...p, key: p.key as FactKey })),
   };
 }
 
@@ -435,6 +485,11 @@ export async function createCheckedEvent(
       "INSERT INTO sources (event_id, source_type, raw_post_id, url, submission_id) VALUES ($1,$2,$3,$4,$5)",
       [eventId, source.type, source.rawPostId ?? null, source.url, source.submissionId ?? null]);
     await attachPeople(client, eventId, e);
+    // Practical details as checked by the reviewer: a post's are credited to the post, a submission's to the organiser.
+    await storeFacts(client, eventId, formFacts(f.practical), {
+      type: source.type === "instagram" || source.type === "web" ? "post" : "organiser",
+      url: source.url, rawPostId: source.rawPostId ?? null, submissionId: source.submissionId ?? null,
+    });
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
@@ -465,6 +520,7 @@ export async function approveSubmission(
   const cityId = opts.cityId ?? sub.city_id;
   if (!cityId) throw new Error("the submission has no city");
   if (opts.fields) await pool.query("UPDATE submissions SET fields = $2, city_id = $3, updated_at = now() WHERE id = $1", [id, fields, cityId]);
+  if (fields.for_event) return approveFacts(pool, id, fields);
   const fromPoster = sub.channel !== "form";
   const out = await createCheckedEvent(pool, llm, cityId, fields, {
     type: fromPoster ? "poster" : "submission",
@@ -478,6 +534,19 @@ export async function approveSubmission(
     [id, `published as ${out.path}`]);
   if (sub.poster_id) await keepPosterUntilEvent(pool, sub.poster_id, fields.end_date || fields.date);
   return out;
+}
+
+/** Approves practical details sent for an event already listed: they are stored as the organiser's answers. */
+async function approveFacts(pool: Pool, id: number, fields: SubmissionFields): Promise<ApprovedEvent> {
+  const ev = (await pool.query<{ id: number; path: string }>(
+    "SELECT e.id, '/' || c.slug || '/events/' || e.slug AS path FROM events e JOIN cities c ON c.id = e.city_id WHERE e.id = $1", [fields.for_event])).rows[0];
+  if (!ev) throw new Error("the event these details are for no longer exists");
+  const stored = await storeFacts(pool, ev.id, formFacts(fields.practical), { type: "organiser", submissionId: id });
+  await pool.query("UPDATE submissions SET status = 'approved', event_id = $2, decided_at = now(), updated_at = now() WHERE id = $1", [id, ev.id]);
+  await pool.query(
+    `UPDATE review_queue SET status = 'approved', resolved_at = now(), resolution_note = $2 WHERE item_type = 'submission' AND item_id = $1 AND status = 'open'`,
+    [id, `${stored.stored} practical detail(s) saved on ${ev.path}`]);
+  return { eventId: ev.id, path: ev.path, published: true, descriptionUsd: 0 };
 }
 
 export async function rejectSubmission(pool: Pool, id: number, note: string): Promise<void> {

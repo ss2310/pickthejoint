@@ -57,6 +57,11 @@ export async function changedPaths(pool: Pool, since: Date | null): Promise<stri
          AND EXISTS (SELECT 1 FROM event_organisers j JOIN events e ON e.id = j.event_id WHERE j.organiser_id = p.id AND e.is_published)`, [since]);
     for (const r of enriched.rows) paths.add(r.path);
   }
+  // Weekly guides published, unpublished or reworded since the last ping (Prompt 11).
+  const guides = await pool.query<{ city: string; slug: string }>(
+    `SELECT c.slug AS city, r.slug FROM roundups r JOIN cities c ON c.id = r.city_id
+     WHERE c.is_live AND r.published_at IS NOT NULL AND ($1::timestamptz IS NULL OR r.updated_at > $1)`, [since]);
+  for (const g of guides.rows) { paths.add(`/${g.city}/guide/${g.slug}`); paths.add(`/${g.city}/guide`); }
   // Every one of these pages exists in each language.
   return [...paths].flatMap((p) => locales.map((l) => localePath(p, l)));
 }

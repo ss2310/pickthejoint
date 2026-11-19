@@ -95,7 +95,7 @@ const LABELS: [keyof SubmissionFields, string][] = [
   ["title", "title"], ["date", "date"], ["start_time", "start time"], ["end_date", "last day"], ["end_time", "end time"],
   ["venue", "venue"], ["category", "category"], ["price", "price"], ["is_free", "free entry"], ["booking_url", "booking link"],
 ];
-const shown = (v: string | boolean | string[] | undefined) => (typeof v === "boolean" ? (v ? "yes" : "no") : v ? `"${v}"` : "none");
+const shown = (v: SubmissionFields[keyof SubmissionFields]) => (typeof v === "boolean" ? (v ? "yes" : "no") : typeof v === "string" && v ? `"${v}"` : "none");
 const oneLine = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
 
 function check(f: SubmissionFields, reason: string): void {

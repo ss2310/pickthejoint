@@ -21,8 +21,9 @@ Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 
 | Second look (owner's decisions of 19 Nov, not a numbered prompt) | Live but **switched off**. Run once on production on 19 Nov (1 merged, 3 lookups found nothing, $0.39). Daily running (`SECOND_LOOK=on` on `ingest`) is the owner's later call. See "Second look" below |
 | 9 Wider sourcing | Live. Built on 18 Nov at the owner's request before the week of cost data ("start now anyway"). See "Prompt 9 check results" below |
 | Facebook page posts (owner's request of 19 Nov, not a numbered prompt) | Live (PR #34). The owner saw the dry-run cost and had it switched on: `FACEBOOK_POSTS=on` was set on `ingest` on 19 Nov, so the first real run is the 06:00 IST job of 20 Nov. See "Facebook page posts" below |
-| 10 Artist tracking and official video | Built on 19 Nov (PR #35), brought up to date with main on 20 Nov. The owner has decided to build 10 to 15 now without waiting for cost data. See "Prompt 10" below for what is checked and what waits |
-| 11 to 15 | Not started; to be built next, two per session. Text in `docs/build-prompts.md` |
+| 10 Artist tracking and official video | Live: PR #35 merged and deployed on 20 Nov (migration 013 ran on `web`). The owner has decided to build 10 to 15 now without waiting for cost data. See "Prompt 10" below for what is checked and what waits |
+| 11 Practical facts and weekly roundups | Built on 20 Nov (pull request open, not merged). See "Prompt 11" below |
+| 12 to 15 | Not started; to be built next, two per session. Text in `docs/build-prompts.md` |
 
 Production showed 13 Indore events before Prompt 6; one approved submission has been added since.
 
@@ -103,6 +104,7 @@ Production showed 13 Indore events before Prompt 6; one approved submission has 
 
 - **Prompt 9:** (1) approve or dismiss the suggested handles at `/admin/handles` (now with how often and where each was seen), and start tracking venue handles at `/admin/venues`; the handle list is still the main limit on coverage. (2) Facebook pages: done on 19 Nov (120 supplied; see "Facebook page posts" below). (3) Decide whether Meetup group iCal feeds are acceptable. District has been written to; the AllEvents API request is drafted but not known to be sent. (4) Review the 8 IIT Indore conferences and the MeraEvents possible duplicate in the review queue.
 - **Facebook page posts:** after the first real run (20 Nov), compare its cost with the Apify console and set `APIFY_USD_PER_FB_POST` if the plan charges less than $0.007 a post; look at `pagesWithNothing` in the run report for pages the scraper could not read.
+- **Prompt 11 (after merging):** (1) the prompt's checks on production: a free dry run of `npm run job:facts-backfill -- --dry-run --limit 20`, then (paid, owner's yes) the real run, to show three event pages with their "Before you go" answers and sources; and "Draft now" at `/admin/roundups` (about a cent) for one Indore guide in both languages. (2) Each Thursday from then on: read the draft at `/admin/roundups` and publish it.
 - **Prompt 10:** (1) add `YOUTUBE_API_KEY` on `web` in Railway (steps were given on 19 Nov), then a reference to it on `ingest`. (2) At `/admin/artists`: add Instagram accounts for tracked artists that have none, check each suggested YouTube channel is the artist's own, and approve or reject the videos.
 
 - Resend key and sending address (above).
@@ -298,8 +300,18 @@ Built in the same session as the Facebook posts reader (that session's second bu
 - **Known limits:** an artist needs an Instagram account in `official_links` to be tracked (many artist stubs have none: add them on the admin page). A show post is filed under the city of the artist's nearest event; multi-city tour posts are Prompt 13's job. No `VideoObject` structured data yet, because only the year of publication is stored and Google wants a full date.
 - **Checks still to run on production** (the prompt's own): tracking for 5 artists with upcoming events, showing updates produced and ignored, the video selections awaiting approval, and the cost per tracked artist per month. Expected cost per artist: at most 3 posts every 3 days at $0.0023, so about $0.07 a month to scrape, plus under $0.01 in model spend.
 
-## Next: Prompt 11
+## Prompt 11 (20 Nov): practical facts and weekly roundups
 
-Practical facts and weekly roundups. The text is in `docs/build-prompts.md`. **The owner decided (said again on 20 Nov) to build Prompts 10 to 15 now, one after another, without waiting for the week of cost data.** Keep to two builds per session. The coverage reports stored on 23 and 30 Nov still show which Prompt 9 sources earn their keep.
+Built in the session that merged Prompt 10. How it works is in the README section "Practical facts and weekly guides (Prompt 11)".
+
+- **Practical facts:** asked for in the same extraction call (no second call; about 100 more output tokens per post at most, roughly $0.001), stored in `practical_facts` with their source, shown as "Before you go" with `FAQPage` data. Organisers send details through `/submit?event=<id>`, which goes to the review queue; the admin edits them at `/admin/events/<id>`. Duplicate merges move them. Translated into Hindi with the rest.
+- **Weekly guide:** drafted by the Thursday `ingest` run (`ROUNDUPS=off` stops it), published from `/admin/roundups`. About a cent per city per week, inside `ROUNDUPS_BUDGET_USD` ($2).
+- **Checked:** `tests/practical-roundups.test.ts` (16 tests: storing and ranking answers, the form and its review, admin edits, merges, the page block and its FAQ data, Hindi, the backfill, week and section choice, drafting rules, the article page, sitemap and IndexNow). 261 tests pass in all; type-check, lint and build clean.
+- **Not checked yet:** no real model call has been made by this code, and the pages have not been viewed in a browser. The prompt's own checks need production (see "Waiting on the owner").
+- **Known limits:** facts from posts processed before this change exist only after the backfill or a new post about the same event. "For families" relies on the kids category or an age-limit answer saying all ages or children, so it may be missing in a week where it would fit. The ISO week number names the guide after the Friday's week.
+
+## Next: Prompt 12
+
+Social posts with approved auto-publishing. The text is in `docs/build-prompts.md`. Start it in a new session (two builds were done in this one: merging Prompt 10 and building Prompt 11). It needs Meta developer access (an account-bound dependency: ask the owner first) and the prompt asks for Meta's current documentation to be read before any code. **The owner decided (said again on 20 Nov) to build Prompts 10 to 15 now, one after another, without waiting for the week of cost data.** The coverage reports stored on 23 and 30 Nov still show which Prompt 9 sources earn their keep.
 
 Also on 19 Nov: the owner wrote to District asking for a feed or permission (the reply is pending; nothing is built for District), and has a drafted request for AllEvents' paid Events API (its price is unknown; nothing is to be built on it until the owner has seen the price).

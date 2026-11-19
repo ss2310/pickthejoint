@@ -157,6 +157,8 @@ export const budgets = {
   artistText: num("ARTIST_TEXT_BUDGET_USD", 3),
   /** Sub-limit inside "model" for reading events from web calendars and Facebook events (Prompt 9). */
   webCalendars: num("WEB_CALENDARS_BUDGET_USD", 3),
+  /** Sub-limit inside "model" for the weekly roundup per city: one overview in English and Hindi per city per week (Prompt 11). */
+  roundups: num("ROUNDUPS_BUDGET_USD", 2),
   /** Fraction of a cap at which a warning is logged. */
   warnAt: 0.8,
 } as const;
@@ -165,7 +167,7 @@ export type BudgetBucket = "scrape" | "model";
 export type SubBudget =
   | "secondLook"
   | "reelTranscript" | "googleEvents" | "newsCalendars" | "enrichment" | "translation" | "submissions" | "search" | "citations"
-  | "discovery" | "facebookEvents" | "facebookPosts" | "webCalendars" | "artistTracking" | "artistText";
+  | "discovery" | "facebookEvents" | "facebookPosts" | "webCalendars" | "artistTracking" | "artistText" | "roundups";
 
 export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   reelTranscript: "scrape",
@@ -183,6 +185,7 @@ export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   webCalendars: "model",
   artistTracking: "scrape",
   artistText: "model",
+  roundups: "model",
 };
 
 /**
@@ -444,6 +447,23 @@ export const translation = {
 } as const;
 
 export const displayTimeZone = "Asia/Kolkata";
+
+/**
+ * Weekly roundup per city (Prompt 11). The ingest job drafts one each Thursday (IST) for the Friday
+ * to Thursday ahead; the admin publishes it. ROUNDUPS=off stops the drafting.
+ */
+export const roundups = {
+  enabled: process.env.ROUNDUPS !== "off",
+  weekday: "Thursday",
+  /** No guide for a week with fewer events than this. */
+  minEvents: 3,
+  /** "Free this weekend" and "For families" appear only with at least this many events each. */
+  minForExtraSection: 3,
+  /** Events listed to the model for the overview; the article itself lists all of them. */
+  maxEventsInPrompt: 60,
+  introMinWords: 70,
+  introMaxWords: 140,
+} as const;
 
 /**
  * AI crawler user-agent tokens: training, search and live-fetch agents.

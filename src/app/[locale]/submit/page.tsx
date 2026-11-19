@@ -3,6 +3,8 @@ import { Hero } from "@/components/ui";
 import { submissions as cfg } from "@/config";
 import { categoryName } from "@/lib/hubs";
 import { alternates, getLocale, messages, setLocale } from "@/lib/locale";
+import { getPool } from "@/lib/db";
+import { FACT_KEYS, storedFacts } from "@/lib/practical";
 import { listAreas, listCategories, liveCities } from "@/lib/queries";
 import { emptyFields, getDraft, type FieldError, type SubmissionFields } from "@/lib/submissions";
 import { sendEvent, snapPoster } from "./actions";
@@ -10,7 +12,36 @@ import { sendEvent, snapPoster } from "./actions";
 // Drafts change on every post; nothing here is cached.
 export const dynamic = "force-dynamic";
 
-type Search = { draft?: string; read?: string; many?: string; upload?: string };
+type Search = { draft?: string; read?: string; many?: string; upload?: string; event?: string };
+
+/** The listed event a "practical details" form is for, or null. */
+async function factsEvent(id: number | null | undefined) {
+  if (!id || !Number.isInteger(id)) return null;
+  const { rows } = await getPool().query<{ id: number; title: string; local_date: string; city_slug: string }>(
+    `SELECT e.id, e.title, e.local_date::text, c.slug AS city_slug FROM events e JOIN cities c ON c.id = e.city_id
+     WHERE e.id = $1 AND e.is_published AND c.is_live AND e.status IN ('scheduled', 'postponed')`, [id]);
+  return rows[0] ?? null;
+}
+
+/** The practical questions as inputs (Prompt 11). Every one may be left empty. */
+function PracticalInputs({ values, err, invalid }: {
+  values: Partial<Record<string, string>>; err: (name: string) => React.ReactNode; invalid: (name: string) => Record<string, unknown>;
+}) {
+  const m = messages().practical;
+  return (
+    <>
+      {FACT_KEYS.map((key) => (
+        <label key={key} className={key === "doors_time" ? "field" : "field wide"}>{m.labels[key]}
+          {key === "doors_time"
+            ? <input type="time" name="fact_doors_time" defaultValue={values[key] ?? ""} {...invalid("fact_doors_time")} />
+            : <input type="text" name={`fact_${key}`} defaultValue={values[key] ?? ""} maxLength={240} />}
+          {m.hints[key] && <span className="hint">{m.hints[key]}</span>}
+          {err(`fact_${key}`)}
+        </label>
+      ))}
+    </>
+  );
+}
 type Props = { params: Promise<{ locale: string }>; searchParams: Promise<Search> };
 
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
@@ -48,6 +79,60 @@ export default async function SubmitPage({ params, searchParams }: Props) {
   const uncertain = (f.uncertain ?? []).map((k) => LABEL_KEY[k]).filter(Boolean).map((k) => String(m[k]));
   const siteKey = cfg.turnstileSiteKey;
   const turnstile = siteKey ? <div className="cf-turnstile" data-sitekey={siteKey} data-language={getLocale()} /> : null;
+  const p = messages().practical;
+  // Practical details for an event already listed: from its page's link, or a draft of that form sent back with an error.
+  const forId = draft ? draft.fields.for_event : q.event ? Number(q.event) : null;
+  const target = forId ? await factsEvent(forId) : null;
+  const known = target ? await storedFacts(getPool(), target.id) : {};
+
+  if (forId) {
+    return (
+      <main>
+        <Hero trail={[{ name: m.title, path: "/submit" }]} title={target ? p.forHeading(target.title) : m.title}>
+          <p className="lead">{target ? p.forLead : p.forNotFound}</p>
+        </Hero>
+        {target && (
+          <div className="wrap page narrow">
+            {Object.keys(errors).length > 0 && (
+              <p className="banner banner-warn" role="alert">{errors._form ? m.errors[errors._form] : errors._facts ? m.errors[errors._facts] : m.errorSummary}</p>
+            )}
+            <section aria-labelledby="form-heading" className="form-card" id="form">
+              <h2 id="form-heading">{p.formHeading}</h2>
+              <p className="muted small">{p.formLead}</p>
+              <form action={sendEvent} className="form-grid" key={draft ? `${draft.token}-${draft.updated_at.valueOf()}` : "facts"}>
+                <input type="hidden" name="locale" value={locale} />
+                <input type="hidden" name="for_event" value={target.id} />
+                <input type="hidden" name="city" value={target.city_slug} />
+                {draft && <input type="hidden" name="draft" value={draft.token} />}
+                <div className="hp" aria-hidden="true">
+                  <label>Website <input type="text" name="website" tabIndex={-1} autoComplete="off" /></label>
+                </div>
+                <PracticalInputs values={draft?.fields.practical ?? known} err={err} invalid={invalid} />
+                <label className="field wide">{m.note}
+                  <textarea name="note" defaultValue={f.note} maxLength={1500} rows={3} />
+                </label>
+                <fieldset className="wide">
+                  <legend>{m.aboutYou}</legend>
+                  <p className="muted small">{m.aboutYouNote}</p>
+                  <div className="form-grid">
+                    <label className="field">{m.name} *
+                      <input type="text" name="name" defaultValue={who.name} maxLength={120} autoComplete="name" required {...invalid("name")} />{err("name")}
+                    </label>
+                    <label className="field">{m.contact} *
+                      <input type="text" name="contact" defaultValue={who.contact} maxLength={200} autoComplete="email" required {...invalid("contact")} />{err("contact")}
+                    </label>
+                  </div>
+                </fieldset>
+                {turnstile && <div className="wide"><p className="muted small">{m.captchaNote}</p>{turnstile}</div>}
+                <p className="wide"><button type="submit" className="button">{m.send}</button></p>
+              </form>
+            </section>
+          </div>
+        )}
+        {target && siteKey && <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer />}
+      </main>
+    );
+  }
 
   return (
     <main>
@@ -163,6 +248,13 @@ export default async function SubmitPage({ params, searchParams }: Props) {
             <label className="field wide">{m.organiser}
               <input type="text" name="organiser" defaultValue={f.organiser} maxLength={160} />
             </label>
+            <details className="wide" open={!!f.practical || !!errors.fact_doors_time}>
+              <summary>{p.formHeading}</summary>
+              <p className="muted small">{p.formLead}</p>
+              <div className="form-grid">
+                <PracticalInputs values={f.practical ?? {}} err={err} invalid={invalid} />
+              </div>
+            </details>
             <label className="field wide">{m.note}
               <textarea name="note" defaultValue={f.note} maxLength={1500} rows={3} />
             </label>

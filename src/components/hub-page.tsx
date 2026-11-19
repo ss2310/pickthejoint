@@ -1,7 +1,9 @@
 /** One renderer for every hub: city home, today, this weekend, this week, a category, an area, the archive. */
 import type { Metadata } from "next";
 import { hubFaqs, hubSummary, type Hub } from "@/lib/hubs";
-import { alternates, localePath, messages } from "@/lib/locale";
+import { getPool } from "@/lib/db";
+import { alternates, getLocale, localePath, messages } from "@/lib/locale";
+import { listRoundups } from "@/lib/roundups";
 import { areasWithEvents, cityLastChange, listCategories, listEvents, type City } from "@/lib/queries";
 import { itemListLd, pageLd } from "@/lib/schema";
 import { AskBox, EventList, FaqBlock, Hero, HubNav, JsonLd, Link, Updated, type Crumb } from "./ui";
@@ -23,6 +25,8 @@ export async function HubPage({ city, hub }: { city: City; hub: Hub }) {
   const [events, categories, lastChange] = await Promise.all([listEvents(hub.filter), listCategories(), cityLastChange(city.id)]);
   const next = events.length === 0 && hub.kind !== "past" ? (await listEvents({ cityId: city.id, limit: 1 }))[0] : undefined;
   const areas = hub.kind === "home" ? await areasWithEvents(city.id) : [];
+  // The newest published weekly guide (Prompt 11), linked from the city home and the weekend and week pages.
+  const guide = ["home", "this-weekend", "this-week"].includes(hub.kind) ? (await listRoundups(getPool(), city.id, getLocale(), 1))[0] : undefined;
   const trail: Crumb[] = [{ name: city.name, path: `/${city.slug}` }];
   if (hub.kind !== "home") trail.push({ name: hub.heading, path: hub.path });
 
@@ -45,6 +49,7 @@ export async function HubPage({ city, hub }: { city: City; hub: Hub }) {
               <a href={`/${city.slug}/feed.json`}>{m.jsonFeed}</a>
             </p>
           )}
+          {guide && <p className="small"><Link href={`/${city.slug}/guide/${guide.slug}`}>{messages().guide.latest(city.name)}</Link>: {guide.title}</p>}
         </section>
 
         {areas.length > 0 && (

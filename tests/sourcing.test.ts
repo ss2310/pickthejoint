@@ -51,7 +51,7 @@ function ev(over: Partial<Extraction["events"][number]> = {}): Extraction["event
     announcement: "new_event", title: f("Winter Jazz Night"), start_date: f(inDays(5)), start_time: f("19:30"),
     end_date: f<string>(null), end_time: f<string>(null), venue_name: f("Ravindra Natya Grah"), venue_instagram_handle: null,
     city: f("Indore"), area: f("South Tukoganj"), price_text: f("₹300"), is_free: f(false), booking_url: f<string>(null),
-    performers: [], organiser: f<string>(null), organiser_instagram_handle: null, category: f("music"), ...over,
+    performers: [], organiser: f<string>(null), organiser_instagram_handle: null, category: f("music"), practical: [], ...over,
   };
 }
 const extraction = (events: Extraction["events"]): Extraction => ({ is_event_post: events.length > 0, events, co_host_handles: [], notes: "" });

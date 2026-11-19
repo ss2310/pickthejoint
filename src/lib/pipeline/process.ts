@@ -30,7 +30,7 @@ export interface ProcessOptions {
   expectedNewPosts?: number;
 }
 
-interface RawRow {
+export interface RawRow {
   id: number; shortcode: string; handle: string; post_url: string; post_type: string | null; caption: string | null;
   media_urls: string[]; tagged_handles: string[]; posted_at: Date | null; fetched_at: Date; source_kind: "instagram" | "google" | "news" | "web" | "facebook";
   filter_result: FilterLabel | null; extraction: Extraction | null; transcript: string | null;
@@ -39,7 +39,7 @@ interface RawRow {
   page_name: string | null;
 }
 
-const RAW_SELECT = `
+export const RAW_SELECT = `
   SELECT rp.id, rp.shortcode, rp.handle, rp.post_url, rp.post_type, rp.caption, rp.media_urls, rp.tagged_handles,
          rp.posted_at, rp.fetched_at, rp.source_kind, rp.filter_result, rp.extraction, rp.transcript,
          rp.transcript_requested_at, c.id AS city_id, c.name AS city_name, c.timezone,
@@ -62,7 +62,7 @@ async function charge(pool: Pool, rawPostId: number | string, amount: number) {
 /** Where a raw post came from, for per-source counts: "instagram", or "<kind>:<source key>". */
 export const sourceLabel = (kind: string, handle: string) => (kind === "instagram" ? "instagram" : `${kind}:${handle}`);
 
-async function cityLists(pool: Pool) {
+export async function cityLists(pool: Pool) {
   const areas = await pool.query<{ city_id: number; name: string }>("SELECT city_id, name FROM areas ORDER BY name");
   const cats = await pool.query<{ slug: string }>("SELECT slug FROM categories ORDER BY sort_order");
   return {
@@ -71,7 +71,7 @@ async function cityLists(pool: Pool) {
   };
 }
 
-function toInput(row: RawRow, lists: Awaited<ReturnType<typeof cityLists>>, images: ExtractionInput["images"]): ExtractionInput {
+export function toInput(row: RawRow, lists: Awaited<ReturnType<typeof cityLists>>, images: ExtractionInput["images"]): ExtractionInput {
   const fbPost = isFacebookPost(row);
   return {
     id: String(row.id), sourceKind: fbPost ? "facebook_post" : row.source_kind,

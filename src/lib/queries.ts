@@ -55,6 +55,8 @@ export interface EventFilter {
   /** "upcoming" (default): not yet over. "past": over. "any": both. */
   when?: "upcoming" | "past" | "any";
   excludeId?: number;
+  /** Only these events (a weekly guide's). */
+  ids?: number[];
   limit?: number;
   /**
    * Search words (Prompt 7), already folded by `foldText`. Latin words use full-text search over the event's
@@ -130,6 +132,7 @@ export async function listEvents(f: EventFilter, locale: Locale = getLocale()): 
   if (f.free === true) where.push("e.is_free IS TRUE");
   if (f.free === false) where.push("e.is_free IS NOT TRUE AND e.price_text IS NOT NULL");
   if (f.excludeId) add("e.id <> ?", f.excludeId);
+  if (f.ids) add("e.id = ANY(?::bigint[])", f.ids);
   const words = keywordSql(f, (value) => { args.push(value); return `$${args.length}`; });
   if (words) where.push(words);
   const when = f.when ?? "upcoming";
