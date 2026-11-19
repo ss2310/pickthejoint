@@ -25,7 +25,7 @@ export interface ImportResult {
 }
 
 /** Minimal CSV line splitter that understands double-quoted fields. */
-function splitCsvLine(line: string): string[] {
+export function splitCsvLine(line: string): string[] {
   const out: string[] = [];
   let cur = "";
   let quoted = false;

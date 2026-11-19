@@ -113,6 +113,11 @@ export const budgets = {
   discovery: num("DISCOVERY_BUDGET_USD", 3),
   /** Sub-limit inside "scrape" for reading public Facebook event pages through Apify (Prompt 9). */
   facebookEvents: num("FACEBOOK_EVENTS_BUDGET_USD", 5),
+  /**
+   * Sub-limit inside "scrape" for reading the recent posts of public Facebook pages through Apify.
+   * It also bounds the model spend on those posts, since only stored posts are ever read by a model.
+   */
+  facebookPosts: num("FACEBOOK_POSTS_BUDGET_USD", 10),
   /** Sub-limit inside "model" for reading events from web calendars and Facebook events (Prompt 9). */
   webCalendars: num("WEB_CALENDARS_BUDGET_USD", 3),
   /** Fraction of a cap at which a warning is logged. */
@@ -122,7 +127,7 @@ export const budgets = {
 export type BudgetBucket = "scrape" | "model";
 export type SubBudget =
   | "reelTranscript" | "googleEvents" | "newsCalendars" | "enrichment" | "translation" | "submissions" | "search" | "citations"
-  | "discovery" | "facebookEvents" | "webCalendars";
+  | "discovery" | "facebookEvents" | "facebookPosts" | "webCalendars";
 
 export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   reelTranscript: "scrape",
@@ -135,6 +140,7 @@ export const subBudgetParent: Record<SubBudget, BudgetBucket> = {
   citations: "scrape",
   discovery: "scrape",
   facebookEvents: "scrape",
+  facebookPosts: "scrape",
   webCalendars: "model",
 };
 
@@ -283,8 +289,41 @@ export const sourcing = {
     usdPerRun: 0.001,
     /** Logged out, a page shows about this many upcoming events. */
     maxEventsPerPage: 8,
-    maxPagesPerRun: num("FACEBOOK_MAX_PAGES_PER_RUN", 60),
+    /**
+     * The guard prices a run at every page returning its full 8 events, so this many pages must fit
+     * under the monthly limit: 30 pages is $2.40 against the default $5.
+     */
+    maxPagesPerRun: num("FACEBOOK_MAX_PAGES_PER_RUN", 30),
     everyHours: 6.5 * 24,
+  },
+  /**
+   * Recent posts of the same public Facebook pages (the owner's decision of 19 Nov 2026): most pages
+   * announce events in ordinary posts, not through Facebook's Events feature. Read logged out through
+   * Apify; new posts go through the same filter, extraction and publishing rules as Instagram posts.
+   */
+  facebookPosts: {
+    actorId: process.env.APIFY_FACEBOOK_POSTS_ACTOR_ID ?? "apify/facebook-posts-scraper",
+    /** Off until FACEBOOK_POSTS=on is set on the job service, so a deploy alone never starts paid runs. */
+    get enabled() { return process.env.FACEBOOK_POSTS === "on"; },
+    /**
+     * Apify's list price, read 19 Nov 2026: $0.005 a post plus $0.002 for the "newer than" filter, which
+     * stops us paying for posts we already have. Paid plans are cheaper; set APIFY_USD_PER_FB_POST to match.
+     */
+    usdPerPost: num("APIFY_USD_PER_FB_POST", 0.007),
+    /** Per tier: hours between checks (a little under 2, 7 and 14 days) and the newest posts taken per check. */
+    tiers: {
+      A: { everyHours: 44, posts: 3 },
+      B: { everyHours: 6.5 * 24, posts: 3 },
+      C: { everyHours: 13.5 * 24, posts: 2 },
+    },
+    /** A page with this many posts read and not one that led to an event is read at the tier C pace. */
+    quietAfterPosts: 12,
+    /** How far back to look the first time a page is read. */
+    firstCheckLookbackDays: 21,
+    pagesPerActorRun: 25,
+    maxPagesPerRun: num("FACEBOOK_POSTS_MAX_PAGES_PER_RUN", 60),
+    /** Characters of post text (and text read off its image) kept. */
+    maxChars: 5000,
   },
   calendars: {
     /** Comma-separated calendar keys to switch on; when unset, the `enabled` flags in data/sourcing.json apply. */

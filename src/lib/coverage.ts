@@ -86,7 +86,7 @@ export async function coverageReport(pool: Pool, citySlug: string, weekStart: st
   for (const s of spend) {
     const usd = Number(s.usd);
     if (s.sub_budget === "discovery") discoveryUsd += usd;
-    else if (s.sub_budget === "facebookEvents") scrape["facebook"] = (scrape["facebook"] ?? 0) + usd;
+    else if (s.sub_budget === "facebookEvents" || s.sub_budget === "facebookPosts") scrape["facebook"] = (scrape["facebook"] ?? 0) + usd;
     else if (s.sub_budget === "googleEvents") scrape["google"] = (scrape["google"] ?? 0) + usd;
     else if ((s.sub_budget === null || s.sub_budget === "reelTranscript") && s.job_name === "ingest") scrape["instagram"] = (scrape["instagram"] ?? 0) + usd;
   }

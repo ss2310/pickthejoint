@@ -19,7 +19,7 @@ export interface JobArgs {
   force: boolean;
   /** Cap on handles checked in this run. */
   limit?: number;
-  /** Which sources to run: instagram, google, news, web, facebook, discovery. */
+  /** Which sources to run: instagram, google, news, web, facebook (native events), facebook-posts, discovery. */
   sources: string[];
   /** Skip fetching; only process posts already stored. */
   processOnly: boolean;
@@ -39,7 +39,7 @@ export interface JobArgs {
   coverage: boolean;
 }
 
-export const ALL_SOURCES = ["instagram", "google", "news", "web", "facebook", "discovery"];
+export const ALL_SOURCES = ["instagram", "google", "news", "web", "facebook", "facebook-posts", "discovery"];
 
 export function parseArgs(argv: string[]): JobArgs {
   const value = (name: string) => {

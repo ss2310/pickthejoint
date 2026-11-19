@@ -35,15 +35,22 @@ interface RawRow {
   media_urls: string[]; tagged_handles: string[]; posted_at: Date | null; fetched_at: Date; source_kind: "instagram" | "google" | "news" | "web" | "facebook";
   filter_result: FilterLabel | null; extraction: Extraction | null; transcript: string | null;
   transcript_requested_at: Date | null; city_id: number; city_name: string; timezone: string; handle_type: string | null;
+  /** The Facebook page's name, for Facebook items. */
+  page_name: string | null;
 }
 
 const RAW_SELECT = `
   SELECT rp.id, rp.shortcode, rp.handle, rp.post_url, rp.post_type, rp.caption, rp.media_urls, rp.tagged_handles,
          rp.posted_at, rp.fetched_at, rp.source_kind, rp.filter_result, rp.extraction, rp.transcript,
-         rp.transcript_requested_at, c.id AS city_id, c.name AS city_name, c.timezone, h.handle_type
+         rp.transcript_requested_at, c.id AS city_id, c.name AS city_name, c.timezone,
+         coalesce(h.handle_type, fp.category) AS handle_type, fp.name AS page_name
   FROM raw_posts rp
   LEFT JOIN handles h ON h.handle = rp.handle AND rp.source_kind = 'instagram'
+  LEFT JOIN facebook_pages fp ON fp.page = rp.handle AND fp.city_id = rp.city_id AND rp.source_kind = 'facebook'
   JOIN cities c ON c.id = coalesce(rp.city_id, h.city_id)`;
+
+/** An ordinary post on a Facebook page ("fbp:<post id>"), as opposed to a native Facebook event ("fb:<event id>"). */
+const isFacebookPost = (row: Pick<RawRow, "source_kind" | "shortcode">) => row.source_kind === "facebook" && row.shortcode.startsWith("fbp:");
 
 const usd = (n: number) => Number(n.toFixed(4));
 
@@ -65,8 +72,10 @@ async function cityLists(pool: Pool) {
 }
 
 function toInput(row: RawRow, lists: Awaited<ReturnType<typeof cityLists>>, images: ExtractionInput["images"]): ExtractionInput {
+  const fbPost = isFacebookPost(row);
   return {
-    id: String(row.id), sourceKind: row.source_kind, sourceName: row.handle, sourceType: row.handle_type ?? undefined,
+    id: String(row.id), sourceKind: fbPost ? "facebook_post" : row.source_kind,
+    sourceName: fbPost ? `${row.page_name ? `"${row.page_name}", ` : ""}facebook.com/${row.handle}` : row.handle, sourceType: row.handle_type ?? undefined,
     cityName: row.city_name, timeZone: row.timezone, postedAt: row.posted_at ?? row.fetched_at,
     text: row.caption ?? "", transcript: row.transcript, images,
     areas: lists.areasFor(row.city_id), categorySlugs: lists.categorySlugs,
@@ -185,7 +194,7 @@ export async function processPosts(pool: Pool, deps: Deps, opts: ProcessOptions)
     `${RAW_SELECT} WHERE rp.processing_state = 'new' AND rp.filter_result IN ('event','maybe') ORDER BY rp.id`)).rows;
   const inputs = new Map<number, ExtractionInput>();
   for (const row of toExtract) {
-    const images = row.source_kind === "instagram" ? await fetchImages(row.media_urls ?? [], deps.fetchFn) : undefined;
+    const images = row.source_kind === "instagram" || isFacebookPost(row) ? await fetchImages(row.media_urls ?? [], deps.fetchFn) : undefined;
     inputs.set(row.id, toInput(row, lists, images));
   }
   const extracted = new Map<number, Extraction>();
@@ -207,7 +216,8 @@ export async function processPosts(pool: Pool, deps: Deps, opts: ProcessOptions)
   if (apify.reelTranscriptActorId) {
     for (const row of toExtract) {
       const ex = extracted.get(row.id);
-      if (!ex || row.post_type !== "reel" || row.transcript_requested_at || missingForTranscript(ex).length === 0) continue;
+      // The transcript actor reads Instagram reels only.
+      if (!ex || row.source_kind !== "instagram" || row.post_type !== "reel" || row.transcript_requested_at || missingForTranscript(ex).length === 0) continue;
       const text = await guardedCall(
         {
           bucket: "scrape", subBudget: "reelTranscript", service: "apify", model: apify.reelTranscriptActorId,

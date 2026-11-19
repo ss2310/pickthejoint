@@ -32,6 +32,8 @@ export interface CitySourcing {
   censusBbox?: [number, number, number, number];
   hashtags: string[];
   calendars: CalendarSource[];
+  /** Other spellings of the city's name (for example in Hindi), for telling whether a text is about the city. */
+  cityNames: string[];
 }
 
 let cache: Record<string, CitySourcing> | undefined;
@@ -41,13 +43,13 @@ export function sourcingData(file = path.join(process.cwd(), "data", "sourcing.j
   const raw = JSON.parse(readFileSync(file, "utf8")) as Record<string, Partial<CitySourcing>>;
   const out: Record<string, CitySourcing> = {};
   for (const [city, v] of Object.entries(raw)) {
-    out[city] = { censusBbox: v.censusBbox, hashtags: v.hashtags ?? [], calendars: v.calendars ?? [] };
+    out[city] = { censusBbox: v.censusBbox, hashtags: v.hashtags ?? [], calendars: v.calendars ?? [], cityNames: v.cityNames ?? [] };
   }
   return (cache = out);
 }
 
 export function forCity(slug: string): CitySourcing {
-  return sourcingData()[slug] ?? { hashtags: [], calendars: [] };
+  return sourcingData()[slug] ?? { hashtags: [], calendars: [], cityNames: [] };
 }
 
 /** Calendars switched on: WEB_CALENDARS when set, otherwise each entry's own flag. */

@@ -44,7 +44,8 @@ export type ExtractedEvent = Extraction["events"][number];
 
 export interface ExtractionInput {
   id: string;
-  sourceKind: "instagram" | "google" | "news" | "web" | "facebook" | "poster";
+  /** "facebook" is a native Facebook event; "facebook_post" an ordinary post on a public Facebook page. */
+  sourceKind: "instagram" | "google" | "news" | "web" | "facebook" | "facebook_post" | "poster";
   /** Instagram handle, or the name of the web source. */
   sourceName: string;
   sourceType?: string;
@@ -105,7 +106,10 @@ export function extractionRequest(input: ExtractionInput): LlmRequest<Extraction
             ? `Event listing or calendar page: ${input.sourceName}; "published" is the day we read it`
             : input.sourceKind === "facebook"
               ? `Public Facebook event, read from ${input.sourceName}; "published" is the day we read it`
-              : `Local news page: ${input.sourceName}`;
+              : input.sourceKind === "facebook_post"
+                ? `Post on the public Facebook page ${input.sourceName}${input.sourceType ? ` (listed as: ${input.sourceType})` : ""}. ` +
+                  "Treat the page as the posting account. It is a Facebook page, not an Instagram account: give an Instagram handle only if one is written in the post"
+                : `Local news page: ${input.sourceName}`;
   const parts = [
     `City: ${input.cityName}`,
     `Source: ${source}`,
@@ -113,7 +117,7 @@ export function extractionRequest(input: ExtractionInput): LlmRequest<Extraction
     `Known areas in ${input.cityName}: ${input.areas.join(", ")}`,
     `Allowed categories: ${input.categorySlugs.join(", ")}`,
     "",
-    input.sourceKind === "instagram" ? "Caption:" : input.sourceKind === "poster" ? "Note from the sender (may be empty; facts on the poster come first):" : "Text:",
+    input.sourceKind === "instagram" || input.sourceKind === "facebook_post" ? "Caption:" : input.sourceKind === "poster" ? "Note from the sender (may be empty; facts on the poster come first):" : "Text:",
     input.text.trim() || "(empty)",
   ];
   if (input.transcript?.trim()) {
