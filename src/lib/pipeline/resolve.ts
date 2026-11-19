@@ -292,7 +292,7 @@ async function createEvent(db: Db, ctx: PostContext, e: ExtractedEvent, venueId:
 }
 
 /** A further post about an existing event: add it as a source and fill in facts the event lacks. */
-async function mergeInto(db: Db, eventId: number, ctx: PostContext, e: ExtractedEvent) {
+export async function mergeInto(db: Db, eventId: number, ctx: PostContext, e: ExtractedEvent) {
   const t = timing(e, ctx.timeZone);
   const others = await db.query<{ handle: string | null; kind: string | null }>(
     `SELECT rp.handle, rp.source_kind AS kind FROM sources s LEFT JOIN raw_posts rp ON rp.id = s.raw_post_id WHERE s.event_id = $1`, [eventId]);
