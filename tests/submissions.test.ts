@@ -51,7 +51,7 @@ function event(over: Partial<Extraction["events"][number]> = {}): Extraction["ev
     announcement: "new_event", title: f("Sufi Night"), start_date: f(inDays(5)), start_time: f("19:30"), end_date: f<string>(null),
     end_time: f<string>(null), venue_name: f("Ravindra Natya Griha"), venue_instagram_handle: null, city: f("Indore"), area: f("South Tukoganj"),
     price_text: f("₹300"), is_free: f(false), booking_url: f<string>(null), performers: [{ name: "Rahat Ensemble", kind: "group", confidence: 0.9 }],
-    organiser: f<string>(null), organiser_instagram_handle: null, category: f("music"), practical: [], ...over,
+    organiser: f<string>(null), organiser_instagram_handle: null, category: f("music"), practical: "", ...over,
   };
 }
 

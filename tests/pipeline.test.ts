@@ -69,7 +69,7 @@ function event(over: Partial<Extraction["events"][number]> = {}): Extraction["ev
     city: f("Indore"),
     area: f("Vijay Nagar"), price_text: f("₹499 onwards"), is_free: f(false), booking_url: f<string>(null),
     performers: [{ name: "Aria Quartet", kind: "group", confidence: 0.9 }], organiser: f<string>(null),
-    organiser_instagram_handle: null, category: f("music"), practical: [], ...over,
+    organiser_instagram_handle: null, category: f("music"), practical: "", ...over,
   };
 }
 const extraction = (events: Extraction["events"], coHosts: string[] = []): Extraction =>

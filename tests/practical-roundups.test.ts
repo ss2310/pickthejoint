@@ -11,7 +11,8 @@ import { freshDb } from "./helpers";
 import { seed } from "../db/seed";
 import { closePool } from "../src/lib/db";
 import type { Extraction, ExtractedEvent } from "../src/lib/pipeline/extract";
-import { extractionSchema } from "../src/lib/pipeline/extract";
+import { extractionSchema, practicalOf } from "../src/lib/pipeline/extract";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { LlmClient, LlmRequest, LlmResult, LlmRunOptions } from "../src/lib/pipeline/llm";
 import { emptyCounts, resolvePost, type PostContext } from "../src/lib/pipeline/resolve";
 import { housekeeping } from "../src/lib/pipeline/housekeeping";
@@ -101,9 +102,15 @@ const facts = async () => (await pool.query<{ entity_type: string; fact_key: str
 describe("practical facts from posts", () => {
   it("asks the model for them in the extraction", () => {
     const schema = extractionSchema(["music"]);
-    const parsed = schema.parse({ is_event_post: true, co_host_handles: [], notes: "", events: [{ ...ev(), practical: [{ key: "age_limit", answer: "18+", confidence: 0.9 }] }] });
-    expect(parsed.events[0].practical[0].key).toBe("age_limit");
-    expect(() => schema.parse({ is_event_post: true, co_host_handles: [], notes: "", events: [{ ...ev(), practical: [{ key: "shoe_size", answer: "9", confidence: 1 }] }] })).toThrow();
+    const lines = ["age_limit | 0.95 | 18+ only", "- parking | 0.9 | Basement parking, paid", "shoe_size | 1 | 9", "not a fact line"].join("\n");
+    const parsed = schema.parse({ is_event_post: true, co_host_handles: [], notes: "", events: [{ ...ev(), practical: lines }] });
+    expect(practicalOf(parsed.events[0])).toEqual([
+      { key: "age_limit", confidence: 0.95, answer: "18+ only" }, { key: "parking", confidence: 0.9, answer: "Basement parking, paid" },
+    ]);
+    expect(practicalOf({ practical: "" })).toEqual([]);
+    expect(practicalOf({})).toEqual([]);
+    // The schema the model is held to stays small: a nested list there made the request too large for structured outputs.
+    expect(JSON.stringify(zodOutputFormat(schema)).length).toBeLessThan(3400);
   });
 
   it("stores confident stated facts with their source, venue facts on the venue, and never a guess", async () => {
@@ -207,7 +214,7 @@ describe("facts for events listed before Prompt 11", () => {
     const e = await oneEvent();
     await pool.query("DELETE FROM practical_facts");
     const reading: Extraction = { is_event_post: true, co_host_handles: [], notes: "", events: [ev({
-      title: f("Sufi Night (Indore)"), start_date: f(inDays(9)), practical: [{ key: "entry_rules", answer: "Passes needed; entry closes at 8 PM", confidence: 0.9 }],
+      title: f("Sufi Night (Indore)"), start_date: f(inDays(9)), practical: "entry_rules | 0.9 | Passes needed; entry closes at 8 PM",
     })] };
     class Reader implements LlmClient {
       seen = 0;
