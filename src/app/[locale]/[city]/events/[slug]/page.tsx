@@ -1,11 +1,13 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import PlainLink from "next/link";
+import { VideoList } from "@/components/artist-media";
 import { EventList, Hero, JsonLd, Link, Updated, priceLabel } from "@/components/ui";
+import { artistTracking } from "@/config";
 import { clock, longDate, plainDate, stamp } from "@/lib/format";
 import { categoryName } from "@/lib/hubs";
 import { alternates, localePath, messages, setLocale } from "@/lib/locale";
-import { getEvent, listEvents, type EventDetail } from "@/lib/queries";
+import { artistVideos, getEvent, listEvents, type EventDetail } from "@/lib/queries";
 import { abs, eventImagePath, eventLd, eventPath, ids, pageLd, venuePath } from "@/lib/schema";
 
 // Rebuilt at most every 10 minutes, so a change to the event (new time, cancellation) reaches the page quickly.
@@ -65,10 +67,14 @@ export default async function EventPage({ params }: Props) {
   if (!e) notFound();
   const m = messages().event;
 
-  const [atVenue, alike] = await Promise.all([
+  const [atVenue, alike, videos] = await Promise.all([
     e.venue_id ? listEvents({ venueId: e.venue_id, excludeId: e.id, limit: 5 }) : [],
     e.category_id ? listEvents({ cityId: e.city_id, categoryId: e.category_id, excludeId: e.id, limit: 5 }) : [],
+    artistVideos(e.artists.map((a) => a.slug), artistTracking.videosOnEventPage),
   ]);
+  // "Get to know the artist": one or two approved official videos for the first two performers who have any.
+  const entity = messages().entity;
+  const known = e.artists.filter((a) => videos.some((v) => v.artist_slug === a.slug)).slice(0, 2);
   const price = priceLabel(e);
   const over = e.status === "happened";
   const category = e.category_slug ? categoryName({ slug: e.category_slug, name: e.category_name }) : null;
@@ -166,6 +172,10 @@ export default async function EventPage({ params }: Props) {
       </article>
 
       <div className="wrap">
+        {known.map((a) => (
+          <VideoList key={a.slug} id={`know-${a.slug}`} heading={entity.getToKnow(a.name)} note={entity.videosNote(a.name)}
+            videos={videos.filter((v) => v.artist_slug === a.slug)} more={{ href: `/artists/${a.slug}`, text: entity.morePage(a.name) }} />
+        ))}
         {atVenue.length > 0 && (
           <section aria-labelledby="venue-more"><h2 id="venue-more">{m.moreAt(e.venue_name!)}</h2><EventList events={atVenue} empty="" /></section>
         )}

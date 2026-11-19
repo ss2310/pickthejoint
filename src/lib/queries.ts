@@ -299,3 +299,31 @@ export async function cityLastChange(cityId: number): Promise<Date | null> {
     "SELECT max(updated_at) AS t FROM events WHERE city_id = $1 AND is_published", [cityId]);
   return rows[0].t;
 }
+
+/** A dated one-line note about an artist's new release, in our own words, with the post it came from (Prompt 10). */
+export interface ArtistUpdate { text: string; post_url: string; posted_at: Date | null }
+
+export async function artistUpdates(artistId: number, locale: Locale = getLocale()): Promise<ArtistUpdate[]> {
+  return (await getPool().query<ArtistUpdate>(
+    `SELECT ${tr(locale, "artist_post", "p.id", "update_text", "p.update_text")} AS text, p.post_url, p.posted_at
+     FROM artist_posts p
+     WHERE p.artist_id = $1 AND p.label = 'new_release' AND NOT p.hidden AND p.update_text IS NOT NULL
+     ORDER BY p.posted_at DESC NULLS LAST, p.id DESC LIMIT 10`, [artistId])).rows;
+}
+
+/** An official video the owner has approved for an artist. Only YouTube's ID and facts are stored. */
+export interface ArtistVideo {
+  artist_slug: string; video_id: string; title: string; published_year: number | null; blurb: string | null; channel_title: string | null;
+}
+
+/** Approved videos for these artists, best-known first, at most `perArtist` each. */
+export async function artistVideos(slugs: string[], perArtist: number, locale: Locale = getLocale()): Promise<ArtistVideo[]> {
+  if (slugs.length === 0) return [];
+  return (await getPool().query<ArtistVideo>(
+    `SELECT artist_slug, video_id, title, published_year, blurb, channel_title FROM (
+       SELECT a.slug AS artist_slug, v.video_id, v.title, v.published_year, ${tr(locale, "artist_video", "v.id", "blurb", "v.blurb")} AS blurb,
+              v.channel_title, v.position, row_number() OVER (PARTITION BY v.artist_id ORDER BY v.position, v.id) AS n
+       FROM artist_videos v JOIN artists a ON a.id = v.artist_id
+       WHERE a.slug = ANY($1) AND v.status = 'approved') x
+     WHERE n <= $2 ORDER BY artist_slug, position`, [slugs, perArtist])).rows;
+}

@@ -87,3 +87,7 @@ OpenStreetMap through the Overpass API: free, no account; the data is © OpenStr
 ### Community spaces
 
 The city's Reddit community, WhatsApp and Telegram groups are not scraped. They are covered by the poster inbox (Prompt 6) and by posting our roundups there by hand.
+
+### YouTube (official video on artist pages, Prompt 10)
+
+YouTube Data API v3 with an API key, inside the free quota (read 19 Nov 2026 on developers.google.com: 100 `search.list` calls a day in their own bucket, 10,000 units a day for everything else). Only video and channel IDs, titles, publication years and view counts are stored. Videos are shown only through YouTube's own embedded player (`youtube-nocookie.com`), never downloaded or rehosted, and only after the owner approves each selection. The API's terms require that data is kept fresh or dropped: view counts are used once, to pick videos and write the note, and are not shown as live figures.
