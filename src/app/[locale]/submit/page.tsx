@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Hero } from "@/components/ui";
-import { submissions as cfg } from "@/config";
+import { parked, submissions as cfg } from "@/config";
 import { categoryName } from "@/lib/hubs";
 import { alternates, getLocale, messages, setLocale } from "@/lib/locale";
 import { getPool } from "@/lib/db";
@@ -66,6 +66,14 @@ const LABEL_KEY: Record<string, keyof ReturnType<typeof messages>["submit"]> = {
 export default async function SubmitPage({ params, searchParams }: Props) {
   const locale = setLocale((await params).locale);
   const m = messages().submit;
+  // Parked (see PARKED.md): nobody is moderating and housekeeping is off, so the form is closed.
+  if (parked.on) {
+    return (
+      <main>
+        <Hero trail={[{ name: m.title, path: "/submit" }]} title={m.title}><p className="lead">{messages().site.parkedSubmit}</p></Hero>
+      </main>
+    );
+  }
   const q = await searchParams;
   const draft = q.draft ? await getDraft(q.draft) : null;
   const [cities, categories] = await Promise.all([liveCities(), listCategories()]);

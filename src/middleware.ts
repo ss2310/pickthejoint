@@ -1,7 +1,8 @@
 import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
-import { aiCrawlers, defaultLocale, locales } from "@/config";
+import { aiCrawlers, defaultLocale, locales, parked } from "@/config";
 import { CHECK_HEADER } from "@/lib/crawl-check";
 import { getPool } from "@/lib/db";
+import { staleWhileParked } from "@/lib/parked";
 
 /**
  * Two jobs.
@@ -57,8 +58,14 @@ export function middleware(req: NextRequest, event: NextFetchEvent) {
     );
   }
   const r = route(req.nextUrl.pathname);
-  if (r.action === "next") return NextResponse.next();
+  // While parked, pages whose listings go stale are kept out of search and AI answers (see src/lib/parked.ts).
+  const noindex = parked.on && !NO_LOCALE.test(req.nextUrl.pathname) && staleWhileParked(req.nextUrl.pathname);
+  const tag = (res: NextResponse) => {
+    if (noindex) res.headers.set("X-Robots-Tag", "noindex");
+    return res;
+  };
+  if (r.action === "next") return tag(NextResponse.next());
   const url = req.nextUrl.clone();
   url.pathname = r.to;
-  return r.action === "redirect" ? NextResponse.redirect(url, 308) : NextResponse.rewrite(url);
+  return r.action === "redirect" ? NextResponse.redirect(url, 308) : tag(NextResponse.rewrite(url));
 }

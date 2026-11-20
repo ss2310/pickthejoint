@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import { inbound } from "@/config";
+import { inbound, parked } from "@/config";
 import { getPool } from "@/lib/db";
 import { handleInbound, verifyWebhook } from "@/lib/inbound-email";
 import { AnthropicLlm } from "@/lib/pipeline/llm";
@@ -13,6 +13,8 @@ export const maxDuration = 300;
  * and read after the response, so Resend gets its 200 at once.
  */
 export async function POST(req: Request): Promise<Response> {
+  // Parked (see PARKED.md): acknowledged so the sender does not retry, but not read (reading a poster is a paid call).
+  if (parked.on) return new Response("Parked: poster email is off");
   if (!inbound.webhookSecret) return new Response("Poster email is not set up", { status: 503 });
   const body = await req.text();
   const ok = verifyWebhook(inbound.webhookSecret, {

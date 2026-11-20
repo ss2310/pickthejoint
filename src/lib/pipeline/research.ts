@@ -13,7 +13,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Pool } from "pg";
 import { enrichment, models, type SubBudget } from "../../config";
-import { guardedCall } from "../budget-guard";
+import { assertNotParked, guardedCall } from "../budget-guard";
 import { tokenCostUsd } from "./llm";
 
 export interface RetrievedPage { url: string; title: string | null }
@@ -126,6 +126,7 @@ export function finalNotes(content: { type: string; text?: string }[]): string {
 export class AnthropicResearch implements ResearchClient {
   private client: Anthropic | undefined;
   private sdk(): Anthropic {
+    assertNotParked("Claude API research call");
     return (this.client ??= new Anthropic());
   }
 

@@ -2,7 +2,7 @@
  * Read queries for the public pages. Only published events are ever returned.
  * Dates are compared in the city's timezone.
  */
-import type { Locale } from "../config";
+import { parked, type Locale } from "../config";
 import { getPool } from "./db";
 import { getLocale } from "./locale";
 
@@ -287,8 +287,10 @@ export async function sitemapRows(type: string): Promise<{ path: string; lastmod
   const published = "EXISTS (SELECT 1 FROM events e WHERE e.is_published AND";
   switch (type) {
     case "events":
+      // Parked (see PARKED.md): events not yet over carry noindex, so only finished ones are listed.
       return q(`SELECT '/' || c.slug || '/events/' || e.slug AS path, e.updated_at AS lastmod
-                FROM events e JOIN cities c ON c.id = e.city_id WHERE e.is_published AND c.is_live ORDER BY e.starts_at DESC LIMIT 45000`);
+                FROM events e JOIN cities c ON c.id = e.city_id WHERE e.is_published AND c.is_live
+                ${parked.on ? "AND coalesce(e.ends_at, e.starts_at) < now()" : ""} ORDER BY e.starts_at DESC LIMIT 45000`);
     case "venues":
       return q(`SELECT '/' || c.slug || '/venues/' || v.slug AS path,
                        greatest(v.updated_at, (SELECT max(e.updated_at) FROM events e WHERE e.venue_id = v.id AND e.is_published)) AS lastmod

@@ -2,6 +2,7 @@
  * Minimal Apify REST client (API v2): start an actor run, wait for it, read
  * its dataset. Callers wrap `runActor` in the budget guard.
  */
+import { assertNotParked } from "../budget-guard";
 
 export interface ActorRunOptions {
   /** Upper bound on what the run may charge, in USD. Sent to Apify as a hard cap. */
@@ -31,6 +32,7 @@ export class HttpApifyClient implements ApifyClient {
   constructor(private readonly token = process.env.APIFY_TOKEN ?? "") {}
 
   private async call(path: string, init?: RequestInit): Promise<unknown> {
+    assertNotParked("Apify call");
     if (!this.token) throw new ApifyError("APIFY_TOKEN is not set");
     const res = await fetch(`${BASE}${path}`, {
       ...init,

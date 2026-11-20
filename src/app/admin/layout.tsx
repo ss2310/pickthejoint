@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
-import { site } from "@/config";
+import { parked, site } from "@/config";
 import { isAdmin } from "@/lib/admin-session";
 import { logout } from "./auth-actions";
 import "../globals.css";
@@ -42,7 +42,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             )}
           </div>
         </header>
-        <main className="wrap admin-main">{children}</main>
+        <main className="wrap admin-main">
+          {signedIn && parked.on && (
+            <p className="banner banner-warn" role="status">
+              <strong>Parked.</strong> Scheduled jobs do nothing and every paid call is refused, so buttons that read a poster, write text or
+              draft a guide will fail. Do not run the AI citation check. See PARKED.md in the repository to restart.
+            </p>
+          )}
+          {children}
+        </main>
       </body>
     </html>
   );

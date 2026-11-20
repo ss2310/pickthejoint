@@ -16,7 +16,7 @@
  * Months are calendar months in UTC, matching how vendors bill.
  */
 import { getPool } from "./db";
-import { budgets, dailyCaps, subBudgetParent, type BudgetBucket, type SubBudget } from "../config";
+import { budgets, dailyCaps, parked, subBudgetParent, type BudgetBucket, type SubBudget } from "../config";
 import type { Pool } from "pg";
 
 export class BudgetExceededError extends Error {
@@ -32,6 +32,24 @@ export class BudgetExceededError extends Error {
     );
     this.name = "BudgetExceededError";
   }
+}
+
+/**
+ * Thrown for any paid call while PARKED=true. It is a BudgetExceededError, so
+ * every place that already copes with a budget stop (jobs, search, submissions)
+ * copes with parking the same way.
+ */
+export class ParkedError extends BudgetExceededError {
+  constructor(what: string, estimateUsd = 0) {
+    super("parked", 0, 0, estimateUsd);
+    this.message = `PARKED=true: ${what} blocked. Paid calls are off while the project is parked (see PARKED.md).`;
+    this.name = "ParkedError";
+  }
+}
+
+/** For code that talks to a paid API directly: refuse while parked. */
+export function assertNotParked(what: string): void {
+  if (parked.on) throw new ParkedError(what);
 }
 
 export interface PaidCall {
@@ -113,6 +131,10 @@ export async function guardedCall<T>(
   if (!(call.estimatedUsd >= 0)) throw new Error("estimatedUsd must be a non-negative number");
   if (call.subBudget && subBudgetParent[call.subBudget] !== call.bucket) {
     throw new Error(`Sub-budget ${call.subBudget} does not belong to bucket ${call.bucket}`);
+  }
+  // Parked: refuse before touching the database or the vendor. Dry runs send nothing, so they may still log.
+  if (parked.on && !call.dryRun) {
+    throw new ParkedError(`${call.service}${call.model ? ` (${call.model})` : ""} for ${call.jobName}`, call.estimatedUsd);
   }
   const pool = opts.pool ?? getPool();
   const warn = opts.warn ?? ((m: string) => console.warn(`[budget] ${m}`));

@@ -6,7 +6,7 @@ import { PracticalFacts } from "@/components/practical-facts";
 import { getPool } from "@/lib/db";
 import { eventFacts } from "@/lib/practical";
 import { EventList, Hero, JsonLd, Link, Updated, priceLabel } from "@/components/ui";
-import { artistTracking } from "@/config";
+import { artistTracking, parked } from "@/config";
 import { clock, longDate, plainDate, stamp } from "@/lib/format";
 import { categoryName } from "@/lib/hubs";
 import { alternates, getLocale, localePath, messages, setLocale } from "@/lib/locale";
@@ -51,7 +51,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!e) return {};
   const m = messages().event;
   const title = m.titleLine(e.title, e.venue_name, plainDate(e.starts_at, e.timezone));
+  // Parked (see PARKED.md): an event not yet over may change without us knowing, so it is kept out of search.
+  const over = (e.ends_at ?? e.starts_at).getTime() < Date.now();
   return {
+    ...(parked.on && !over ? { robots: { index: false, follow: true } } : {}),
     title,
     description: metaDescription(e),
     alternates: alternates(eventPath(e)),
