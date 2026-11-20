@@ -1,7 +1,8 @@
 import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
-import { aiCrawlers, defaultLocale, locales } from "@/config";
+import { aiCrawlers, defaultLocale, locales, parking } from "@/config";
 import { CHECK_HEADER } from "@/lib/crawl-check";
 import { getPool } from "@/lib/db";
+import { PARKED_ROBOTS_HEADER, goesStale } from "@/lib/parking";
 
 /**
  * Two jobs.
@@ -10,6 +11,8 @@ import { getPool } from "@/lib/db";
  *    the app every page sits under a [locale] segment, so a plain path is
  *    served from /en/... without the address changing, and a typed /en/...
  *    address is sent to the plain one so no page has two English addresses.
+ *
+ * (While parked there is a third: stale listing pages get a noindex header.)
  *
  * 2. Records visits from the AI crawlers named in config: which agent, which
  *    path, when. Nothing is recorded about anyone else, and nothing beyond those
@@ -57,8 +60,19 @@ export function middleware(req: NextRequest, event: NextFetchEvent) {
     );
   }
   const r = route(req.nextUrl.pathname);
-  if (r.action === "next") return NextResponse.next();
-  const url = req.nextUrl.clone();
-  url.pathname = r.to;
-  return r.action === "redirect" ? NextResponse.redirect(url, 308) : NextResponse.rewrite(url);
+  if (r.action === "redirect") {
+    const url = req.nextUrl.clone();
+    url.pathname = r.to;
+    return NextResponse.redirect(url, 308);
+  }
+  let res: NextResponse;
+  if (r.action === "next") res = NextResponse.next();
+  else {
+    const url = req.nextUrl.clone();
+    url.pathname = r.to;
+    res = NextResponse.rewrite(url);
+  }
+  // 3. Parked (PARKED.md): listing pages that go stale are not to be indexed or cited.
+  if (parking.on && goesStale(req.nextUrl.pathname)) res.headers.set(PARKED_ROBOTS_HEADER.name, PARKED_ROBOTS_HEADER.value);
+  return res;
 }

@@ -6,7 +6,7 @@ import type { Pool } from "pg";
 import { sendAlert } from "../alerts";
 import { closePool, getPool } from "../db";
 import { BudgetExceededError, monthSpend } from "../budget-guard";
-import { budgets, subBudgetParent, type BudgetBucket, type SubBudget } from "../../config";
+import { budgets, parking, subBudgetParent, type BudgetBucket, type SubBudget } from "../../config";
 
 export interface JobArgs {
   dryRun: boolean;
@@ -126,8 +126,17 @@ export async function runJob(
   }
 }
 
+/** While parked, prints why a job did nothing and returns true; the process then exits normally (code 0). */
+export function parkedSkip(jobName: string, log: (line: string) => void = console.log): boolean {
+  if (!parking.on) return false;
+  log(JSON.stringify({ job: jobName, skipped: "parked: PARKED=true is set, so no scheduled job runs and no paid call is made (see PARKED.md)" }));
+  return true;
+}
+
 /** Entry point for scripts/jobs/*: run, print the report, exit non-zero on failure. */
 export function main(jobName: string, body: (pool: Pool, report: Report, args: JobArgs) => Promise<void>): void {
+  // Parked (PARKED.md): a scheduled run stops here, before it opens the database or makes any call.
+  if (parkedSkip(jobName)) return;
   const args = parseArgs(process.argv.slice(2));
   runJob(jobName, args.dryRun, (pool, report) => {
     if (args.failOnPurpose) throw new Error("Failed on purpose to test the job alert (FAIL_ON_PURPOSE or --fail-on-purpose).");
