@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import PlainLink from "next/link";
 import { notFound } from "next/navigation";
 import { JsonLd, Link } from "@/components/ui";
-import { site } from "@/config";
+import { parked, site } from "@/config";
 import { LANG_TAG, isLocale, messages, setLocale } from "@/lib/locale";
 import { siteLd } from "@/lib/schema";
 import "../globals.css";
@@ -31,6 +31,7 @@ export default async function RootLayout({ children, params }: Readonly<{ childr
     <html lang={LANG_TAG[locale]}>
       <body>
         <a className="skip" href="#content">{m.skip}</a>
+        {parked.on && <p className="parked-notice" role="status"><span className="wrap">{m.parkedNotice}</span></p>}
         <header className="site-header">
           <div className="wrap">
             <Link href="/" className="brand"><span className="mark" aria-hidden="true" />{site.name}</Link>

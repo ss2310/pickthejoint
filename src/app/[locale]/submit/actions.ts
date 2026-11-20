@@ -7,7 +7,7 @@
  */
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { submissions as cfg } from "@/config";
+import { parked, submissions as cfg } from "@/config";
 import { BudgetExceededError } from "@/lib/budget-guard";
 import { getPool } from "@/lib/db";
 import { isLocale, localePath } from "@/lib/locale";
@@ -43,6 +43,7 @@ async function checkHuman(form: FormData, ip: string, where: "poster" | "form"):
 
 export async function snapPoster(form: FormData): Promise<void> {
   const locale = localeOf(form);
+  if (parked.on) redirect(localePath("/submit", locale)); // closed while parked (PARKED.md)
   const back = (query: string): never => redirect(localePath(`/submit?${query}`, locale));
   const ip = clientIp(await headers());
   const who = ipHash(ip);
@@ -101,6 +102,7 @@ export async function snapPoster(form: FormData): Promise<void> {
 
 export async function sendEvent(form: FormData): Promise<void> {
   const locale = localeOf(form);
+  if (parked.on) redirect(localePath("/submit", locale)); // closed while parked (PARKED.md)
   const ip = clientIp(await headers());
   const who = ipHash(ip);
   const pool = getPool();

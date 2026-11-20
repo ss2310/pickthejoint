@@ -1,5 +1,7 @@
 # Handoff: where the build stands
 
+**Parked on 20 November 2026.** The project is switched off behind `PARKED=true` (see `PARKED.md` in the repository root for what is off and how to restart). Read that first; the rest of this file describes the project as it was when parked.
+
 Written 18 November 2026, at the end of the session that built Prompts 2, 3 and 3b, and updated the same day after Prompts 4 and 5, a redesign, Prompts 6, 7 and 8, and Prompt 9. Read this with `CLAUDE.md` (project rules) and `README.md` (commands and layout). The owner works prompt by prompt from a numbered prompt file (Prompts 1 to 15). **The text of every prompt not yet built is in `docs/build-prompts.md`**, so there is no need to ask for it. Each prompt ends with checks that must be run and shown before moving on.
 
 **Working rule from the owner (18 Nov):** at most two prompts per session. After the second prompt's checks, update this file and start a new session for the next prompt.

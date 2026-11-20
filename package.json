@@ -19,6 +19,7 @@
     "job:second-look": "tsx scripts/jobs/second-look.ts",
     "job:facts-backfill": "tsx scripts/jobs/facts-backfill.ts",
     "translate:backfill": "tsx scripts/translate-backfill.ts",
+    "parked:check": "tsx scripts/parked-check.ts",
     "census": "tsx scripts/census.ts",
     "import:facebook-pages": "tsx scripts/import-facebook-pages.ts",
     "railway:release": "npm run db:migrate && npm run db:seed && npm run import:handles -- data/handles-indore.csv --if-empty && npm run import:facebook-pages -- data/facebook-pages-indore.csv"

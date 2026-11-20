@@ -5,8 +5,8 @@
 import type { Pool } from "pg";
 import { sendAlert } from "../alerts";
 import { closePool, getPool } from "../db";
-import { BudgetExceededError, monthSpend } from "../budget-guard";
-import { budgets, subBudgetParent, type BudgetBucket, type SubBudget } from "../../config";
+import { BudgetExceededError, ParkedError, guardedCall, monthSpend } from "../budget-guard";
+import { budgets, parked, subBudgetParent, type BudgetBucket, type SubBudget } from "../../config";
 
 export interface JobArgs {
   dryRun: boolean;
@@ -126,9 +126,36 @@ export async function runJob(
   }
 }
 
+/**
+ * What a job does while PARKED=true: nothing, except prove the budget guard
+ * still refuses a paid call. The probe's call body must never run; the guard
+ * throws before it touches the database or any vendor.
+ */
+export async function parkedRun(jobName: string): Promise<Report> {
+  const report: Report = { job: jobName, parked: true, skipped: "PARKED=true: scheduled jobs do nothing while the project is parked (see PARKED.md)" };
+  try {
+    await guardedCall(
+      { bucket: "model", service: "anthropic", model: "parked-probe", estimatedUsd: 0.0001, jobName: `${jobName}:parked-probe` },
+      async () => { throw new Error("The parked probe's paid call ran: the budget guard did not block it"); },
+    );
+    report.budgetGuard = "NOT BLOCKED: the probe call was allowed";
+  } catch (err) {
+    report.budgetGuard = err instanceof ParkedError ? `blocked: ${err.message}` : `NOT BLOCKED: ${(err as Error).message}`;
+  }
+  return report;
+}
+
 /** Entry point for scripts/jobs/*: run, print the report, exit non-zero on failure. */
 export function main(jobName: string, body: (pool: Pool, report: Report, args: JobArgs) => Promise<void>): void {
   const args = parseArgs(process.argv.slice(2));
+  if (parked.on) {
+    // No job_runs row, no alert, no database work: parking must be cheap and quiet.
+    void parkedRun(jobName).then((report) => {
+      console.log(JSON.stringify(report, null, 2));
+      process.exit(String(report.budgetGuard).startsWith("blocked") ? 0 : 1);
+    });
+    return;
+  }
   runJob(jobName, args.dryRun, (pool, report) => {
     if (args.failOnPurpose) throw new Error("Failed on purpose to test the job alert (FAIL_ON_PURPOSE or --fail-on-purpose).");
     return body(pool, report, args);

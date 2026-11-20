@@ -1,6 +1,6 @@
 /** XML sitemaps, split by page type, with last-modified dates taken from the data. */
 import { getPool } from "./db";
-import { locales, site } from "../config";
+import { locales, parked, site } from "../config";
 import { changelog } from "../content/changelog";
 import { DATE_HUBS } from "./hubs";
 import { isoDay } from "./format";
@@ -51,6 +51,8 @@ async function hubEntries(now: Date): Promise<SitemapEntry[]> {
     const changed = (await cityLastChange(city.id)) ?? now;
     const midnight = zonedToUtc(isoDay(now, city.timezone), "00:00", city.timezone);
     const daily = changed > midnight ? changed : midnight;
+    // Parked (see PARKED.md): only the archive is listed; the pages that list what is on carry noindex.
+    if (parked.on) { out.push({ path: `${base}/past`, lastmod: changed }); continue; }
     out.push({ path: base, lastmod: daily });
     for (const h of DATE_HUBS) out.push({ path: `${base}/${h}`, lastmod: daily });
     out.push({ path: `${base}/past`, lastmod: changed }, { path: `${base}/search`, lastmod: changed });
@@ -68,7 +70,7 @@ async function hubEntries(now: Date): Promise<SitemapEntry[]> {
     out.push({ path: `/${g.city}/guide/${g.slug}`, lastmod: g.updated_at });
     if (!latest.has(g.city) || latest.get(g.city)! < g.updated_at) latest.set(g.city, g.updated_at);
   }
-  for (const [city, at] of latest) out.push({ path: `/${city}/guide`, lastmod: at });
+  if (!parked.on) for (const [city, at] of latest) out.push({ path: `/${city}/guide`, lastmod: at });
   return out;
 }
 

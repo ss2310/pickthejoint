@@ -97,6 +97,10 @@ ul, ol { padding-left: 1.2rem; }
 .brand { display: inline-flex; align-items: center; gap: 0.55rem; font-family: var(--display); font-weight: 800; font-size: 1.3rem; letter-spacing: -0.02em; color: var(--ink-fg); text-decoration: none; }
 .brand .mark { width: 1.5rem; height: 1.5rem; border-radius: 50% 50% 50% 6px; background: conic-gradient(from 210deg, var(--hot), var(--sun), var(--hot)); box-shadow: inset 0 0 0 0.36rem rgba(18, 11, 46, 0.001), 0 0 22px rgba(255, 61, 119, 0.6); position: relative; }
 .brand .mark::after { content: ""; position: absolute; inset: 32%; border-radius: 50%; background: var(--ink); }
+/* Parked (see PARKED.md): a bar above the header. The header keeps its overlay but starts below the bar (top: auto = where it would sit in flow). */
+.parked-notice { margin: 0; background: var(--ink); color: var(--ink-fg); font-size: 0.9rem; font-weight: 600; padding: 0.6rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.16); }
+.parked-notice .wrap { display: block; }
+.parked-notice + .site-header { top: auto; }
 .site-header nav { display: flex; flex-wrap: wrap; gap: 0.25rem 0.4rem; font-size: 0.92rem; }
 .site-header nav a { color: var(--ink-fg); text-decoration: none; padding: 0.35rem 0.8rem; border-radius: 99px; font-weight: 600; }
 .site-header nav a:hover { background: rgba(255, 255, 255, 0.14); }

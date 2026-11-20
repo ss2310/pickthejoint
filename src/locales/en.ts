@@ -31,6 +31,8 @@ export const en = {
   site: {
     description: "What's on in Indian cities: concerts, comedy, theatre, workshops and more, with sources and verification dates.",
     skip: "Skip to content",
+    parkedNotice: "Pick the Joint is paused. Listings are not being updated, so check with the organiser or the booking page before you go.",
+    parkedSubmit: "We are not taking new events while the site is paused.",
     navAbout: "About",
     navVerify: "How we verify",
     navLabel: "Site",

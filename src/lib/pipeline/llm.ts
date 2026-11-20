@@ -12,7 +12,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
 import type { Pool } from "pg";
 import { batchDiscount, ingestion, modelPricing, models, type ModelTier, type SubBudget } from "../../config";
-import { guardedCall } from "../budget-guard";
+import { assertNotParked, guardedCall } from "../budget-guard";
 
 export interface LlmRequest<T> {
   /** Caller's key for matching results to inputs. */
@@ -120,6 +120,8 @@ async function mapLimit<A, B>(items: A[], limit: number, fn: (item: A) => Promis
 export class AnthropicLlm implements LlmClient {
   private client: Anthropic | undefined;
   private sdk(): Anthropic {
+    // Second lock behind the budget guard: nothing reaches the Claude API while parked.
+    assertNotParked("Claude API call");
     return (this.client ??= new Anthropic());
   }
 
