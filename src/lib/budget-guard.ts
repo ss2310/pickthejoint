@@ -14,9 +14,11 @@
  * In dry-run mode the paid call is skipped and the would-be cost is logged
  * with dry_run = true (excluded from monthly totals).
  * Months are calendar months in UTC, matching how vendors bill.
+ * While parked (PARKED=true, see PARKED.md) both bucket caps are 0 whatever a
+ * caller passes, so every paid call is refused before it is made.
  */
 import { getPool } from "./db";
-import { budgets, dailyCaps, subBudgetParent, type BudgetBucket, type SubBudget } from "../config";
+import { budgets, dailyCaps, parking, subBudgetParent, type BudgetBucket, type SubBudget } from "../config";
 import type { Pool } from "pg";
 
 export class BudgetExceededError extends Error {
@@ -28,7 +30,8 @@ export class BudgetExceededError extends Error {
   ) {
     super(
       `Budget "${budget}" blocked: spent $${spentUsd.toFixed(4)} of $${capUsd.toFixed(2)} this month; ` +
-        `this call would add ~$${estimateUsd.toFixed(4)}`,
+        `this call would add ~$${estimateUsd.toFixed(4)}` +
+        (parking.on ? " (the site is parked: PARKED=true turns every paid call off)" : ""),
     );
     this.name = "BudgetExceededError";
   }
@@ -62,6 +65,7 @@ export interface GuardOptions {
 }
 
 function capFor(name: BudgetBucket | SubBudget, opts: GuardOptions): number {
+  if (parking.on && (name === "scrape" || name === "model")) return 0;
   return opts.caps?.[name] ?? budgets[name];
 }
 

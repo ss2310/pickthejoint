@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import PlainLink from "next/link";
 import { notFound } from "next/navigation";
 import { JsonLd, Link } from "@/components/ui";
-import { site } from "@/config";
+import { parking, site } from "@/config";
 import { LANG_TAG, isLocale, messages, setLocale } from "@/lib/locale";
 import { siteLd } from "@/lib/schema";
 import "../globals.css";
@@ -42,6 +42,8 @@ export default async function RootLayout({ children, params }: Readonly<{ childr
             </nav>
           </div>
         </header>
+        {/* Parked (PARKED.md): one plain line on every page, in the page's language. */}
+        {parking.on && <p className="paused-notice" role="status"><span className="wrap">{m.paused(site.name)}</span></p>}
         <div id="content">{children}</div>
         <footer className="site-footer">
           <div className="wrap">

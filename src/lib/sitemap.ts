@@ -1,6 +1,7 @@
 /** XML sitemaps, split by page type, with last-modified dates taken from the data. */
 import { getPool } from "./db";
-import { locales, site } from "../config";
+import { locales, parking, site } from "../config";
+import { goesStale } from "./parking";
 import { changelog } from "../content/changelog";
 import { DATE_HUBS } from "./hubs";
 import { isoDay } from "./format";
@@ -82,7 +83,8 @@ async function pageEntries(): Promise<SitemapEntry[]> {
 }
 
 export async function sitemapEntries(type: SitemapType, now = new Date()): Promise<SitemapEntry[]> {
-  if (type === "hubs") return hubEntries(now);
+  // Parked (PARKED.md): listing pages that go stale carry noindex, so they are not offered to crawlers either.
+  if (type === "hubs") return (await hubEntries(now)).filter((e) => !(parking.on && goesStale(e.path)));
   if (type === "pages") return pageEntries();
   return sitemapRows(type);
 }

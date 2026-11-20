@@ -36,6 +36,7 @@ export const en = {
     navLabel: "Site",
     footerLabel: "Footer",
     footer: (name: string) => `${name} lists events from named public sources and links to the official booking page. It does not sell tickets.`,
+    paused: (name: string) => `${name} is paused. Listings are not being updated, so check the date and details with the organiser before you go.`,
     footerVerify: "How we collect and verify events",
     footerCorrections: "Corrections and takedown",
     footerChangelog: "Changelog",

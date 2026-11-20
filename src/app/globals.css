@@ -89,6 +89,9 @@ ul, ol { padding-left: 1.2rem; }
 .lead { font-size: clamp(1.05rem, 2vw, 1.25rem); max-width: 44rem; }
 .skip { position: absolute; left: -999rem; }
 .skip:focus { left: 1rem; top: 1rem; background: var(--surface); color: var(--fg); padding: 0.5rem 0.75rem; z-index: 5; border-radius: 8px; }
+/* Parked (PARKED.md): one line under the header on every public page. */
+.paused-notice { margin: 0; background: var(--surface); color: var(--fg); border-bottom: 1px solid var(--muted); font-size: 0.95rem; }
+.paused-notice .wrap { display: block; padding-top: 0.6rem; padding-bottom: 0.6rem; }
 
 /* Frame */
 .wrap { max-width: 70rem; margin: 0 auto; padding-left: 1.25rem; padding-right: 1.25rem; }

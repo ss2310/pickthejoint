@@ -116,14 +116,26 @@ export const ingestion = {
 } as const;
 
 /**
+ * Parked mode (PARKED.md). With PARKED=true on a service: every scheduled job
+ * exits at once without touching the database, both budget caps read as 0 so
+ * the budget guard refuses every paid call, listing pages that go stale are
+ * sent with a noindex header and left out of the sitemap, and every public
+ * page shows a short "paused" notice. Remove the variable to restart.
+ */
+export const parking = {
+  get on() { return process.env.PARKED === "true"; },
+};
+
+/**
  * Monthly budget caps in USD. Each paid call is charged to exactly one bucket.
  * "scrape" covers Apify and any other cash spend; "model" covers Claude API usage.
  * Sub-limits (e.g. reel transcripts) are carved out of a parent bucket and are
- * enforced in addition to it.
+ * enforced in addition to it. While parked, both bucket caps are 0, which blocks
+ * every paid call whatever its sub-budget.
  */
 export const budgets = {
-  scrape: num("SCRAPE_BUDGET_USD", 50),
-  model: num("MODEL_BUDGET_USD", 60),
+  get scrape() { return parking.on ? 0 : num("SCRAPE_BUDGET_USD", 50); },
+  get model() { return parking.on ? 0 : num("MODEL_BUDGET_USD", 60); },
   /** Sub-limit inside "scrape" so transcripts can never crowd out scraping. */
   reelTranscript: num("REEL_TRANSCRIPT_BUDGET_USD", 3),
   /** Sub-limit inside "scrape" for Google event result queries. */
